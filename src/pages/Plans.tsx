@@ -124,7 +124,6 @@ export function Plans() {
                     </button>
                   </>
                 )}
-              )}
             </div>
           </div>
         ))}
