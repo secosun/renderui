@@ -285,12 +285,14 @@ function DeadLetter() {
 function StatsPanel() {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [errMsg, setErrMsg] = useState('');
 
   useEffect(() => {
-    getAdminStats().then(setStats).finally(() => setLoading(false));
+    getAdminStats().then(setStats).catch((e: any) => setErrMsg(e.response?.data?.detail || e.message || '未知错误')).finally(() => setLoading(false));
   }, []);
 
   if (loading) return <div className="text-gray-500">加载中...</div>;
+  if (errMsg) return <div className="text-red-500 text-sm">加载失败: {errMsg}</div>;
   if (!stats) return <div className="text-red-500">加载失败</div>;
 
   return (
@@ -317,8 +319,8 @@ function StatsPanel() {
       <div className="bg-white rounded-lg shadow p-4">
         <h3 className="text-sm font-semibold mb-3">每日渲染完成数 (近 30 天)</h3>
         <div className="flex items-end gap-1 h-32">
-          {stats.daily_tasks.map((d, i) => {
-            const max = Math.max(...stats.daily_tasks.map(x => x.count), 1);
+          {(stats.daily_tasks || []).map((d: any, i: number) => {
+            const max = Math.max(...(stats.daily_tasks || []).map((x: any) => x.count), 1);
             const h = (d.count / max) * 100;
             return (
               <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
