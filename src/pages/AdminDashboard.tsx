@@ -1,17 +1,18 @@
 import { useState, useEffect } from 'react';
 import {
-  getAdminStatus, listUsers, updateUser, updateUserQuota,
+  getAdminStatus, getAdminStats, listUsers, updateUser, updateUserQuota,
   listAdminPlans, createAdminPlan, updateAdminPlan,
   getAuditLog, getDeadLetter, replayDeadLetter,
-  type AdminStatus, type User, type Plan, type AuditLogEntry,
+  type AdminStatus, type AdminStats, type User, type Plan, type AuditLogEntry,
 } from '../api/client';
 
-type AdminTab = 'status' | 'users' | 'plans' | 'audit' | 'dead-letter';
+type AdminTab = 'status' | 'stats' | 'users' | 'plans' | 'audit' | 'dead-letter';
 
 export function AdminDashboard() {
   const [tab, setTab] = useState<AdminTab>('status');
   const tabs: { key: AdminTab; label: string }[] = [
     { key: 'status', label: '系统状态' },
+    { key: 'stats', label: '数据看板' },
     { key: 'users', label: '用户管理' },
     { key: 'plans', label: '套餐管理' },
     { key: 'audit', label: '审计日志' },
@@ -31,6 +32,7 @@ export function AdminDashboard() {
         ))}
       </div>
       {tab === 'status' && <SystemStatus />}
+      {tab === 'stats' && <StatsPanel />}
       {tab === 'users' && <UserManagement />}
       {tab === 'plans' && <PlanManagement />}
       {tab === 'audit' && <AuditLog />}
@@ -275,6 +277,58 @@ function DeadLetter() {
           disabled={!data?.dead_letter_count}
           className="px-4 py-2 bg-orange-600 text-white text-sm rounded hover:bg-orange-700 disabled:opacity-50"
         >重放所有消息</button>
+      </div>
+    </div>
+  );
+}
+
+function StatsPanel() {
+  const [stats, setStats] = useState<AdminStats | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getAdminStats().then(setStats).finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="text-gray-500">加载中...</div>;
+  if (!stats) return <div className="text-red-500">加载失败</div>;
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-white rounded-lg shadow p-4">
+          <p className="text-xs text-gray-500 mb-1">用户总数</p>
+          <p className="text-2xl font-bold">{stats.total_users}</p>
+        </div>
+        <div className="bg-white rounded-lg shadow p-4">
+          <p className="text-xs text-gray-500 mb-1">本月渲染</p>
+          <p className="text-2xl font-bold">{stats.monthly_tasks}</p>
+        </div>
+        <div className="bg-white rounded-lg shadow p-4">
+          <p className="text-xs text-gray-500 mb-1">付费订阅</p>
+          <p className="text-2xl font-bold">{stats.paid_subscriptions}</p>
+        </div>
+        <div className="bg-white rounded-lg shadow p-4">
+          <p className="text-xs text-gray-500 mb-1">月收入 (估)</p>
+          <p className="text-2xl font-bold">¥{stats.estimated_monthly_revenue.toLocaleString()}</p>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg shadow p-4">
+        <h3 className="text-sm font-semibold mb-3">每日渲染完成数 (近 30 天)</h3>
+        <div className="flex items-end gap-1 h-32">
+          {stats.daily_tasks.map((d, i) => {
+            const max = Math.max(...stats.daily_tasks.map(x => x.count), 1);
+            const h = (d.count / max) * 100;
+            return (
+              <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
+                <div className="w-full bg-blue-500 rounded-t"
+                     style={{ height: `${Math.max(h, 1)}%`, minHeight: d.count > 0 ? '4px' : '1px' }} />
+                {d.count > 0 && <span className="text-[8px] text-gray-400">{d.count}</span>}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

@@ -20,6 +20,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <div className="flex gap-4 text-sm">
                 <Link to="/" className="text-gray-600 hover:text-gray-900">模型库</Link>
                 <Link to="/my-tasks" className="text-gray-600 hover:text-gray-900">我的任务</Link>
+                <Link to="/batch" className="text-gray-600 hover:text-gray-900">批量渲染</Link>
               </div>
             )}
           </div>

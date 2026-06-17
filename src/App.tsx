@@ -23,6 +23,7 @@ import { Profile } from './pages/Profile';
 import { Gallery } from './pages/Gallery';
 import { Workers } from './pages/Workers';
 import { Support } from './pages/Support';
+import { BatchRender } from './pages/BatchRender';
 import { AdminTemplates } from './pages/admin/Templates';
 import { AdminFinishes } from './pages/admin/Finishes';
 import { AdminTickets } from './pages/admin/Tickets';
@@ -41,6 +42,7 @@ function App() {
             <Route path="/my-tasks" element={<ProtectedRoute><MyTasks /></ProtectedRoute>} />
             <Route path="/templates/:slug" element={<ProtectedRoute><TemplateDetail /></ProtectedRoute>} />
             <Route path="/new" element={<ProtectedRoute><NewTask /></ProtectedRoute>} />
+            <Route path="/batch" element={<ProtectedRoute><BatchRender /></ProtectedRoute>} />
             <Route path="/tasks/:id" element={<ProtectedRoute><TaskDetail /></ProtectedRoute>} />
             <Route path="/api-keys" element={<ProtectedRoute><ApiKeys /></ProtectedRoute>} />
             <Route path="/plans" element={<ProtectedRoute><Plans /></ProtectedRoute>} />

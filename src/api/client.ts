@@ -248,6 +248,19 @@ export async function getAdminStatus() {
   return data as AdminStatus;
 }
 
+export interface AdminStats {
+  total_users: number;
+  monthly_tasks: number;
+  paid_subscriptions: number;
+  estimated_monthly_revenue: number;
+  daily_tasks: { date: string; count: number }[];
+}
+
+export async function getAdminStats() {
+  const { data } = await api.get('/admin/stats');
+  return data as AdminStats;
+}
+
 export async function listUsers(limit = 100, offset = 0) {
   const { data } = await api.get('/admin/users', { params: { limit, offset } });
   return data as { users: User[] };
