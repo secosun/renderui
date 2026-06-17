@@ -10,9 +10,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const handleLogout = () => { logout(); navigate('/login'); };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
+    <div className="h-screen flex flex-col bg-gray-50">
       {/* Nav */}
-      <nav className="bg-white border-b border-gray-200 px-4 py-3">
+      <nav className="bg-white border-b border-gray-200 px-4 py-3 shrink-0">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-6">
             <Link to="/" className="text-lg font-bold text-blue-700">CADRender</Link>
@@ -85,7 +85,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </nav>
 
-      <main className="flex-1 p-6 max-w-6xl w-full mx-auto" style={{ minHeight: 'calc(100vh - 57px)' }}>
+      <main className="flex-1 p-6 max-w-6xl w-full mx-auto overflow-y-auto" style={{ minHeight: 0 }}>
         {children}
       </main>
     </div>
