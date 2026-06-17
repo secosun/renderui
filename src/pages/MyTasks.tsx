@@ -72,7 +72,23 @@ export function MyTasks() {
     load();
   };
 
-  if (loading) return <div className="flex justify-center py-12"><div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" /></div>;
+  if (loading) return (
+    <div>
+      <div className="h-8 w-32 bg-gray-200 rounded animate-pulse mb-4" />
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="p-4 space-y-3">
+          {[1,2,3,4].map(i => (
+            <div key={i} className="flex gap-4">
+              <div className="w-4 h-4 bg-gray-100 rounded animate-pulse" />
+              <div className="flex-1 h-4 bg-gray-100 rounded animate-pulse" />
+              <div className="w-20 h-4 bg-gray-100 rounded animate-pulse" />
+              <div className="w-16 h-4 bg-gray-100 rounded animate-pulse" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div>

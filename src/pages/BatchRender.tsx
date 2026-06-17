@@ -67,6 +67,8 @@ export function BatchRender() {
 56638f07-62f3-4580-8bf8-edc137f03fba,200,80,50,studio_champagne,立方体 200x80x50
 0a752848-f604-47fa-9322-3212caffd77d,80,120,,studio_black_matte,圆柱体 80x120`;
 
+  const fillSample = () => setCsvText(csvTemplate);
+
   return (
     <div className="max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold mb-2">批量渲染</h1>
@@ -98,6 +100,11 @@ export function BatchRender() {
         <form onSubmit={e => { e.preventDefault(); handleSubmit(); }} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">CSV 数据</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm font-medium text-gray-700">CSV 数据</label>
+              <button type="button" onClick={fillSample}
+                className="text-xs text-blue-600 hover:underline">填入示例</button>
+            </div>
             <textarea value={csvText} onChange={e => setCsvText(e.target.value)}
               placeholder={csvTemplate} rows={10}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:ring-2 focus:ring-blue-500" />

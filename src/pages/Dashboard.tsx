@@ -141,6 +141,8 @@ export function Dashboard() {
           </svg>
           <p className="text-gray-400">暂无可用模型模板</p>
           <p className="text-xs text-gray-400 mt-1">请联系管理员上传 FreeCAD 模板</p>
+          <button onClick={() => { localStorage.removeItem('cadrender_onboarding_done'); setShowGuide(true); }}
+            className="mt-4 text-sm text-blue-600 hover:underline">查看操作引导</button>
         </div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-16">
