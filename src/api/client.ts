@@ -186,8 +186,8 @@ export async function getSubscription() {
   return data as Subscription;
 }
 
-export async function createCheckoutSession(price_id: string, success_url?: string, cancel_url?: string) {
-  const { data } = await api.post('/billing/create-checkout-session', { price_id, success_url, cancel_url });
+export async function createCheckoutSession(price_id: string, success_url?: string, cancel_url?: string, payment_method?: string) {
+  const { data } = await api.post('/billing/create-checkout-session', { price_id, success_url, cancel_url, payment_method });
   return data as { url: string };
 }
 
