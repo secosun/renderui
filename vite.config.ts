@@ -7,6 +7,7 @@ export default defineConfig({
   server: {
     port: 8050,
     strictPort: true,
+    allowedHosts: ['cadrender.installall.cn'],
     proxy: {
       '/api': {
         target: process.env.VITE_API_TARGET || 'http://localhost:8060',
