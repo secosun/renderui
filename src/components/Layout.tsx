@@ -65,6 +65,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
                           className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 font-medium">管理后台</Link>
                         <Link to="/admin/templates" onClick={() => setMenuOpen(false)}
                           className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">模板管理</Link>
+                        <Link to="/admin/finishes" onClick={() => setMenuOpen(false)}
+                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">材质管理</Link>
                       </>
                     )}
                     <div className="border-t border-gray-100 my-1" />
