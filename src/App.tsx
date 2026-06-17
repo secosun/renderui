@@ -22,6 +22,7 @@ import { Scenes } from './pages/Scenes';
 import { Profile } from './pages/Profile';
 import { Gallery } from './pages/Gallery';
 import { Workers } from './pages/Workers';
+import { Support } from './pages/Support';
 import { AdminTemplates } from './pages/admin/Templates';
 import { AdminFinishes } from './pages/admin/Finishes';
 
@@ -49,6 +50,7 @@ function App() {
             <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
             <Route path="/gallery" element={<ProtectedRoute><Gallery /></ProtectedRoute>} />
             <Route path="/workers" element={<ProtectedRoute><Workers /></ProtectedRoute>} />
+            <Route path="/support" element={<ProtectedRoute><Support /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute><AdminRoute><AdminDashboard /></AdminRoute></ProtectedRoute>} />
             <Route path="/admin/templates" element={<ProtectedRoute><AdminRoute><AdminTemplates /></AdminRoute></ProtectedRoute>} />
             <Route path="/admin/finishes" element={<ProtectedRoute><AdminRoute><AdminFinishes /></AdminRoute></ProtectedRoute>} />

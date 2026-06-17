@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { OnboardingGuide } from '../components/OnboardingGuide';
 
 const CATEGORY_COLORS: Record<string, string> = {
   aluminum: 'from-blue-400 to-blue-600',
@@ -24,6 +25,9 @@ export function Dashboard() {
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('');
+  const [showGuide, setShowGuide] = useState(() => {
+    return !localStorage.getItem('cadrender_onboarding_done');
+  });
 
   useEffect(() => {
     axios.get('/api/freecad/templates?limit=50')
@@ -151,6 +155,7 @@ export function Dashboard() {
           ))}
         </div>
       )}
+      {showGuide && <OnboardingGuide onDone={() => { localStorage.setItem('cadrender_onboarding_done', '1'); setShowGuide(false); }} />}
     </div>
   );
 }

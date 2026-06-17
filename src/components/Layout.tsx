@@ -58,6 +58,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
                       className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">Webhook</Link>
                     <Link to="/team" onClick={() => setMenuOpen(false)}
                       className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">团队</Link>
+                    <Link to="/support" onClick={() => setMenuOpen(false)}
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">客服支持</Link>
                     {user.role === 'admin' && (
                       <>
                         <div className="border-t border-gray-100 my-1" />
