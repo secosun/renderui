@@ -75,13 +75,13 @@ export function Gallery() {
                   ) : (
                     <div className="text-gray-400 text-4xl">🖼</div>
                   )}
-                  <div className="absolute top-2 left-2">
+                  <div className="absolute top-2 left-2 opacity-60 hover:opacity-100">
                     <input type="checkbox" checked={selected.has(a.id)}
                       onChange={() => toggleSelect(a.id)}
                       onClick={e => e.stopPropagation()}
                       className="w-4 h-4 accent-blue-600" />
                   </div>
-                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute top-2 right-2">
                     <a href={a.file_url} download target="_blank" rel="noopener noreferrer"
                       onClick={e => e.stopPropagation()}
                       className="bg-white text-gray-700 text-xs px-2 py-1 rounded shadow hover:bg-gray-100">
