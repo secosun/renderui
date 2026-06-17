@@ -8,7 +8,9 @@ import { Register } from './pages/Register';
 import { ForgotPassword } from './pages/ForgotPassword';
 import { ResetPassword } from './pages/ResetPassword';
 import { Dashboard } from './pages/Dashboard';
+import { MyTasks } from './pages/MyTasks';
 import { NewTask } from './pages/NewTask';
+import { TemplateDetail } from './pages/TemplateDetail';
 import { TaskDetail } from './pages/TaskDetail';
 import { ApiKeys } from './pages/ApiKeys';
 import { Plans } from './pages/Plans';
@@ -20,6 +22,7 @@ import { Scenes } from './pages/Scenes';
 import { Profile } from './pages/Profile';
 import { Gallery } from './pages/Gallery';
 import { Workers } from './pages/Workers';
+import { AdminTemplates } from './pages/admin/Templates';
 
 function App() {
   return (
@@ -32,6 +35,8 @@ function App() {
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/my-tasks" element={<ProtectedRoute><MyTasks /></ProtectedRoute>} />
+            <Route path="/templates/:slug" element={<ProtectedRoute><TemplateDetail /></ProtectedRoute>} />
             <Route path="/new" element={<ProtectedRoute><NewTask /></ProtectedRoute>} />
             <Route path="/tasks/:id" element={<ProtectedRoute><TaskDetail /></ProtectedRoute>} />
             <Route path="/api-keys" element={<ProtectedRoute><ApiKeys /></ProtectedRoute>} />
@@ -44,6 +49,7 @@ function App() {
             <Route path="/gallery" element={<ProtectedRoute><Gallery /></ProtectedRoute>} />
             <Route path="/workers" element={<ProtectedRoute><Workers /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute><AdminRoute><AdminDashboard /></AdminRoute></ProtectedRoute>} />
+            <Route path="/admin/templates" element={<ProtectedRoute><AdminRoute><AdminTemplates /></AdminRoute></ProtectedRoute>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Layout>

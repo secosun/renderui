@@ -9,15 +9,19 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:8060',
+        target: process.env.VITE_API_TARGET || 'http://localhost:8060',
         changeOrigin: true,
       },
       '/uploads': {
-        target: 'http://localhost:8060',
+        target: process.env.VITE_API_TARGET || 'http://localhost:8060',
+        changeOrigin: true,
+      },
+      '/outputs': {
+        target: process.env.VITE_API_TARGET || 'http://localhost:8060',
         changeOrigin: true,
       },
       '/ws': {
-        target: 'ws://localhost:8060',
+        target: (process.env.VITE_API_TARGET || 'http://localhost:8060').replace('http', 'ws'),
         ws: true,
       },
     },

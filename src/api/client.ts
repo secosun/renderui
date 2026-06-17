@@ -6,12 +6,15 @@ const api = axios.create({ baseURL: '/api' });
 
 export function setToken(token: string) {
   localStorage.setItem('token', token);
-  api.defaults.headers.Authorization = `Bearer ${token}`;
+  const h = `Bearer ${token}`;
+  api.defaults.headers.Authorization = h;
+  axios.defaults.headers.Authorization = h;
 }
 
 export function clearToken() {
   localStorage.removeItem('token');
   delete api.defaults.headers.Authorization;
+  delete axios.defaults.headers.Authorization;
 }
 
 export function getToken(): string | null {
@@ -20,7 +23,11 @@ export function getToken(): string | null {
 
 // Restore token on load
 const saved = getToken();
-if (saved) api.defaults.headers.Authorization = `Bearer ${saved}`;
+if (saved) {
+  const h = `Bearer ${saved}`;
+  api.defaults.headers.Authorization = h;
+  axios.defaults.headers.Authorization = h;
+}
 
 // ── Types ────────────────────────────────────────────────────────────
 

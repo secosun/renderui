@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { getTask, dispatchTask, cancelTask, cloneTask, connectTaskWS, type Task } from '../api/client';
+import { ModelViewer } from '../components/ModelViewer';
 
 const STATUS_BADGES: Record<string, string> = {
   pending: 'bg-gray-100 text-gray-700', ready: 'bg-blue-100 text-blue-700',
@@ -18,7 +19,6 @@ const RENDER_STAGES = [
   { key: 'importing', label: '导入模型', icon: '📦' },
   { key: 'setup', label: '场景设置', icon: '🎬' },
   { key: 'materials', label: '材质处理', icon: '🎨' },
-  { key: 'preview', label: '预览渲染', icon: '👁️' },
   { key: 'final', label: '最终渲染', icon: '✨' },
   { key: 'export', label: '导出结果', icon: '📥' },
 ];
@@ -121,7 +121,7 @@ export function TaskDetail() {
 
   return (
     <div>
-      <Link to="/" className="text-blue-600 hover:underline text-sm mb-4 inline-block">&larr; 返回任务列表</Link>
+      <Link to="/my-tasks" className="text-blue-600 hover:underline text-sm mb-4 inline-block">&larr; 返回任务列表</Link>
 
       {error && <div className="bg-red-50 text-red-700 p-3 rounded mb-4 text-sm">{error}</div>}
 
@@ -136,8 +136,11 @@ export function TaskDetail() {
         <div className="grid grid-cols-2 gap-4 text-sm">
           {task.name && <div className="col-span-2"><span className="text-gray-500">任务名称</span><p className="font-medium mt-0.5">{task.name}</p></div>}
           <div><span className="text-gray-500">任务 ID</span><p className="font-mono text-xs mt-0.5">{task.id}</p></div>
-          <div><span className="text-gray-500">模型 ID</span><p className="font-mono text-xs mt-0.5">{task.model_id}</p></div>
-          <div><span className="text-gray-500">场景</span><p>{task.scene_name || '-'}</p></div>
+          <div><span className="text-gray-500">模型 ID</span><p className="font-mono text-xs mt-0.5">{task.model_id || task.intent_json?.template_id || task.intent_json?.model_path?.split('/').pop()?.slice(0, 12) || '-'}</p></div>
+          <div><span className="text-gray-500">场景</span><p>{task.scene_name || task.intent_json?.scene_name || '-'}</p></div>
+          {task.intent_json?.model_path && (
+            <div className="col-span-2"><span className="text-gray-500">OBJ 文件</span><p className="font-mono text-xs mt-0.5">{task.intent_json.model_path.split('/').pop()}</p></div>
+          )}
           <div><span className="text-gray-500">描述</span><p>{task.prompt || '-'}</p></div>
           <div><span className="text-gray-500">创建时间</span><p>{new Date(task.created_at).toLocaleString('zh-CN')}</p></div>
           <div><span className="text-gray-500">更新时间</span><p>{new Date(task.updated_at).toLocaleString('zh-CN')}</p></div>
@@ -224,16 +227,27 @@ export function TaskDetail() {
       {task.result_url && !hasMultipleResults && (
         <div className="bg-white rounded-lg shadow p-6 mb-6">
           <h2 className="text-lg font-bold mb-4">渲染结果</h2>
-          {task.result_url.match(/^https?:\/\//) ? (
-            <div className="flex flex-col items-center gap-4">
-              <img src={task.result_url} alt="渲染结果"
-                   className="max-w-full max-h-[600px] rounded-lg shadow" />
-              <a href={task.result_url} target="_blank" rel="noopener noreferrer"
-                 className="text-blue-600 hover:underline text-sm">下载原图</a>
-            </div>
-          ) : (
-            <p className="text-gray-500 text-sm">结果地址: {task.result_url}</p>
-          )}
+          <div className="flex flex-col items-center gap-4">
+            <img src={task.result_url} alt="渲染结果"
+                 className="max-w-full max-h-[600px] rounded-lg shadow" />
+            <a href={task.result_url} target="_blank" rel="noopener noreferrer"
+               className="text-blue-600 hover:underline text-sm">下载原图</a>
+          </div>
+        </div>
+      )}
+
+      {/* 3D Preview — show if there's a 3D model URL available */}
+      {task.status === 'completed' && task.intent_json?.model_path && (
+        <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <h2 className="text-lg font-bold mb-2">3D 预览</h2>
+          <p className="text-xs text-gray-500 mb-3">可交互的 3D 模型预览，拖拽旋转查看</p>
+          <div className="aspect-[4/3] bg-gray-50 rounded-lg overflow-hidden">
+            <ModelViewer
+              src={`/uploads/${task.intent_json.model_path.replace(/^\//, '')}`}
+              alt={`${task.name || task.id} 3D 模型`}
+              className="w-full h-full"
+            />
+          </div>
         </div>
       )}
 
