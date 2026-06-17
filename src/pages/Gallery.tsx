@@ -22,9 +22,23 @@ export function Gallery() {
     setSelected(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   };
 
+  const selectAll = () => {
+    if (selected.size === assets.length) setSelected(new Set());
+    else setSelected(new Set(assets.map(a => a.id)));
+  };
+
   const handleBatchDownload = () => {
-    assets.filter(a => selected.has(a.id)).forEach(a => {
-      if (a.file_url) window.open(a.file_url, '_blank');
+    const items = assets.filter(a => selected.has(a.id) && a.file_url);
+    items.forEach((a, i) => {
+      setTimeout(() => {
+        const link = document.createElement('a');
+        link.href = a.file_url!;
+        link.download = a.file_url!.split('/').pop() || `render_${i}.png`;
+        link.target = '_blank';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }, i * 300);
     });
   };
 
@@ -39,24 +53,43 @@ export function Gallery() {
 
   if (loading) return <div className="text-gray-500">加载中...</div>;
 
+  const hasSelected = selected.size > 0;
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-2xl font-bold">资产库</h1>
-          <p className="text-sm text-gray-500 mt-0.5">共 {total} 个渲染资产</p>
+        <h1 className="text-2xl font-bold">资产库</h1>
+        <div className="flex items-center gap-3 text-sm">
+          <span className="text-gray-500">{total} 个资产</span>
         </div>
+      </div>
+
+      {/* Batch operations bar */}
+      <div className="bg-white rounded-lg shadow px-4 py-2.5 mb-4 flex items-center gap-3 text-sm">
+        {assets.length > 0 && (
+          <label className="flex items-center gap-2 cursor-pointer text-gray-600 hover:text-gray-900">
+            <input type="checkbox" checked={hasSelected && selected.size === assets.length}
+              onChange={selectAll} className="accent-blue-600" />
+            全选
+          </label>
+        )}
+        {assets.length > 0 && (
+          <span className="text-gray-400">|</span>
+        )}
+        <button onClick={handleBatchDownload} disabled={!hasSelected}
+          className="text-blue-600 hover:text-blue-800 disabled:text-gray-300 disabled:cursor-not-allowed">
+          下载 ({hasSelected ? selected.size : 0})
+        </button>
+        {assets.length > 0 && (
+          <span className="text-gray-400">|</span>
+        )}
+        <button onClick={handleBatchDelete} disabled={!hasSelected}
+          className="text-red-600 hover:text-red-800 disabled:text-gray-300 disabled:cursor-not-allowed">
+          删除 ({hasSelected ? selected.size : 0})
+        </button>
+        <div className="flex-1" />
         {selected.size > 0 && (
-          <div className="flex gap-2">
-            <button onClick={handleBatchDownload}
-              className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700">
-              下载选中 ({selected.size})
-            </button>
-            <button onClick={handleBatchDelete}
-              className="px-3 py-1.5 bg-red-50 text-red-700 text-sm rounded hover:bg-red-100">
-              删除选中
-            </button>
-          </div>
+          <span className="text-gray-400">已选 {selected.size} 项</span>
         )}
       </div>
 
@@ -67,7 +100,7 @@ export function Gallery() {
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
             {assets.map(a => (
               <div key={a.id}
-                className={`bg-white border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow group cursor-pointer ${selected.has(a.id) ? 'ring-2 ring-blue-500' : ''}`}
+                className={`bg-white border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer ${selected.has(a.id) ? 'ring-2 ring-blue-500' : ''}`}
                 onClick={() => toggleSelect(a.id)}>
                 <div className="aspect-square bg-gray-100 flex items-center justify-center relative">
                   {a.file_url?.match(/\.(png|jpg|jpeg|webp)$/i) ? (
@@ -75,16 +108,16 @@ export function Gallery() {
                   ) : (
                     <div className="text-gray-400 text-4xl">🖼</div>
                   )}
-                  <div className="absolute top-2 left-2 opacity-60 hover:opacity-100">
+                  <div className="absolute top-2 left-2 opacity-70">
                     <input type="checkbox" checked={selected.has(a.id)}
                       onChange={() => toggleSelect(a.id)}
                       onClick={e => e.stopPropagation()}
                       className="w-4 h-4 accent-blue-600" />
                   </div>
-                  <div className="absolute top-2 right-2">
+                  <div className="absolute bottom-2 right-2 flex gap-1">
                     <a href={a.file_url} download target="_blank" rel="noopener noreferrer"
                       onClick={e => e.stopPropagation()}
-                      className="bg-white text-gray-700 text-xs px-2 py-1 rounded shadow hover:bg-gray-100">
+                      className="bg-white/90 text-gray-700 text-xs px-2 py-1 rounded shadow hover:bg-white">
                       下载
                     </a>
                   </div>
