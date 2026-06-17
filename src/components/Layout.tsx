@@ -10,7 +10,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const handleLogout = () => { logout(); navigate('/login'); };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50" style={{ scrollbarGutter: 'stable' }}>
+    <div className="min-h-screen flex flex-col bg-gray-50">
       {/* Nav */}
       <nav className="bg-white border-b border-gray-200 px-4 py-3">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
