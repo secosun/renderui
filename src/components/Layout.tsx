@@ -85,7 +85,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </nav>
 
-      <main className="flex-1 p-6 max-w-6xl w-full mx-auto">
+      <main className="flex-1 p-6 max-w-6xl w-full mx-auto" style={{ minHeight: 'calc(100vh - 57px)' }}>
         {children}
       </main>
     </div>
