@@ -107,8 +107,7 @@ export function Plans() {
                 <button disabled className="bg-gray-100 text-gray-400 px-4 py-2 rounded-lg text-sm cursor-not-allowed">
                   当前套餐
                 </button>
-              ) : (
-                {plan.slug === 'payg' ? (
+              ) : plan.slug === 'payg' ? (
                   <button onClick={() => setSubscribeTarget({ plan, interval: 'monthly' })}
                     className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm">
                     立即购买
