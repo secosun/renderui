@@ -45,7 +45,11 @@ export function Gallery() {
                   ) : (
                     <div className="text-gray-400 text-4xl">🖼</div>
                   )}
-                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <a href={a.file_url} download target="_blank" rel="noopener noreferrer"
+                      className="bg-white text-gray-700 text-xs px-2 py-1 rounded shadow hover:bg-gray-100">
+                      下载
+                    </a>
                     <button onClick={() => handleDelete(a.id)} className="bg-red-500 text-white text-xs px-2 py-1 rounded hover:bg-red-600">删除</button>
                   </div>
                 </div>
