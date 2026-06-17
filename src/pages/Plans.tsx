@@ -85,10 +85,12 @@ export function Plans() {
             <h2 className="text-xl font-bold mb-1">{plan.name}</h2>
             <p className="text-sm text-gray-500 mb-4">{plan.description}</p>
             <div className="mb-6">
-              <span className="text-3xl font-bold">¥{plan.price_monthly_cents > 0 ? (plan.price_monthly_cents / 100).toFixed(0) : '0'}</span>
+              <span className="text-3xl font-bold">¥{plan.price_monthly_cents > 0 ? (plan.price_monthly_cents / 100).toLocaleString('zh-CN', {minimumFractionDigits: 0}) : '0'}</span>
               <span className="text-gray-500 text-sm">/月</span>
-              {plan.price_yearly_cents > 0 && (
-                <p className="text-xs text-gray-400 mt-1">年付 ¥{(plan.price_yearly_cents / 100).toFixed(0)}</p>
+              {plan.price_yearly_cents > 0 && plan.price_monthly_cents > 0 && (
+                <p className="text-xs text-gray-400 mt-1">年付 ¥{(plan.price_yearly_cents / 100).toLocaleString('zh-CN', {minimumFractionDigits: 0})}
+                  (省 {Math.round((1 - plan.price_yearly_cents / (plan.price_monthly_cents * 12)) * 100)}%)
+                </p>
               )}
             </div>
             <div className="flex-1 space-y-2 mb-6">
