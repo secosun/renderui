@@ -86,7 +86,8 @@ export function Plans() {
             <p className="text-sm text-gray-500 mb-4">{plan.description}</p>
             <div className="mb-6">
               <span className="text-3xl font-bold">¥{plan.price_monthly_cents > 0 ? (plan.price_monthly_cents / 100).toLocaleString('zh-CN', {minimumFractionDigits: 0}) : '0'}</span>
-              <span className="text-gray-500 text-sm">/月</span>
+              <span className="text-gray-500 text-sm">{plan.slug === 'payg' ? '' : '/月'}</span>
+              {plan.slug === 'payg' && <p className="text-xs text-gray-400 mt-1">含 100 张渲染额度</p>}
               {plan.price_yearly_cents > 0 && plan.price_monthly_cents > 0 && (
                 <p className="text-xs text-gray-400 mt-1">年付 ¥{(plan.price_yearly_cents / 100).toLocaleString('zh-CN', {minimumFractionDigits: 0})}
                   (省 {Math.round((1 - plan.price_yearly_cents / (plan.price_monthly_cents * 12)) * 100)}%)
@@ -107,16 +108,23 @@ export function Plans() {
                   当前套餐
                 </button>
               ) : (
-                <>
+                {plan.slug === 'payg' ? (
                   <button onClick={() => setSubscribeTarget({ plan, interval: 'monthly' })}
                     className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm">
-                    月付订阅
+                    立即购买
                   </button>
-                  <button onClick={() => setSubscribeTarget({ plan, interval: 'yearly' })}
-                    className="bg-blue-50 text-blue-700 px-4 py-2 rounded-lg hover:bg-blue-100 text-sm">
-                    年付订阅
-                  </button>
-                </>
+                ) : (
+                  <>
+                    <button onClick={() => setSubscribeTarget({ plan, interval: 'monthly' })}
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm">
+                      月付订阅
+                    </button>
+                    <button onClick={() => setSubscribeTarget({ plan, interval: 'yearly' })}
+                      className="bg-blue-50 text-blue-700 px-4 py-2 rounded-lg hover:bg-blue-100 text-sm">
+                      年付订阅
+                    </button>
+                  </>
+                )}
               )}
             </div>
           </div>
