@@ -19,11 +19,17 @@ interface CalibrationReport {
     candidates: { source_trial: number; search_score: number; confirm_score: number }[];
   };
   validation?: {
+    passed?: boolean;
+    reason?: string;
+    model_path?: string;
+    product_category?: string;
     baseline_path?: string;
     candidate_path?: string;
     baseline_cv?: number;
     candidate_cv?: number;
     cv_delta?: number;
+    baseline_gate_ok?: boolean;
+    candidate_gate_ok?: boolean;
   };
 }
 
@@ -374,6 +380,59 @@ export function AdminCalibrationViewer() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              )}
+
+              {/* Product transfer validation (baseline vs candidate) */}
+              {report.validation && (
+                <div className="bg-white rounded-lg shadow p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="text-xs font-semibold text-gray-500 uppercase">产品迁移验证</div>
+                    <span className={`text-xs px-2 py-0.5 rounded ${
+                      report.validation.passed ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                    }`}>
+                      {report.validation.reason || (report.validation.passed ? 'PASS' : 'FAIL')}
+                    </span>
+                  </div>
+                  {report.validation.model_path && (
+                    <div className="text-xs text-gray-400 mb-3 truncate" title={report.validation.model_path}>
+                      模型: {report.validation.model_path}
+                      {report.validation.product_category && ` · ${report.validation.product_category}`}
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                    <div>
+                      <div className="text-xs text-gray-500 mb-1">校准前 (baseline)</div>
+                      <img
+                        src={`/api/calibration-reports/${report.finish_id}/validation/product_baseline.png`}
+                        alt="product baseline"
+                        className="w-full rounded-lg border bg-gray-50"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                      {report.validation.baseline_cv !== undefined && (
+                        <div className="text-xs text-gray-400 mt-1">CV {report.validation.baseline_cv.toFixed(2)}</div>
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500 mb-1">校准后 (candidate)</div>
+                      <img
+                        src={`/api/calibration-reports/${report.finish_id}/validation/product_candidate.png`}
+                        alt="product candidate"
+                        className="w-full rounded-lg border bg-gray-50"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                      {report.validation.candidate_cv !== undefined && (
+                        <div className="text-xs text-gray-400 mt-1">
+                          CV {report.validation.candidate_cv.toFixed(2)}
+                          {report.validation.cv_delta !== undefined && (
+                            <span className={report.validation.cv_delta >= 0 ? ' text-green-600' : ' text-red-600'}>
+                              {' '}(Δ {report.validation.cv_delta >= 0 ? '+' : ''}{report.validation.cv_delta.toFixed(2)})
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
