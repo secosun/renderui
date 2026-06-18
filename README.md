@@ -1,73 +1,37 @@
-# React + TypeScript + Vite
+# CADRender Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React 19 + TypeScript 6 + Vite 8 + Tailwind CSS 4。
 
-Currently, two official plugins are available:
+## 技术栈
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+| 层 | 技术 |
+|---|------|
+| 框架 | React 19 + TypeScript 6 |
+| 构建 | Vite 8 |
+| 样式 | Tailwind CSS 4 |
+| 路由 | React Router 7 |
+| HTTP | Axios |
+| 3D | Three.js（OBJLoader + OrbitControls） |
+| 认证 | JWT Bearer Token |
 
-## React Compiler
+## 页面
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+| 路径 | 页面 | 权限 |
+|------|------|------|
+| `/` | 仪表盘 | 用户 |
+| `/my-tasks` | 任务列表 | 用户 |
+| `/new` | 新建任务 | 用户 |
+| `/scenes` | 场景选择 | 用户 |
+| `/gallery` | 渲染画廊 | 用户 |
+| `/plans` | 套餐选择 | 用户 |
+| `/admin` | 管理后台 | 管理员 |
+| `/admin/finishes` | 材质管理 | 管理员 |
+| `/admin/calibration` | 校准查看器 | 管理员 |
 
-## Expanding the ESLint configuration
+## 启动
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```powershell
+npm install
+npm run dev
+# → http://localhost:8050
 ```
