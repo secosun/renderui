@@ -289,7 +289,7 @@ export function AdminCalibrationViewer() {
 
                 {selectedImage && (
                   <div className="mb-4">
-                    <img src={`/api/calibration-reports/${report.finish_id}/images/${selectedImage}`}
+                    <img key={selectedImage} src={`/api/calibration-reports/${report.finish_id}/images/${selectedImage}`}
                       alt={selectedImage} className="w-full max-w-lg mx-auto rounded-lg border shadow-lg" />
                     <div className="flex items-center justify-center gap-3 mt-2">
                       <span className="text-xs text-gray-400">{selectedImage}</span>
@@ -403,7 +403,7 @@ export function AdminCalibrationViewer() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
                     <div>
                       <div className="text-xs text-gray-500 mb-1">校准前 (baseline)</div>
-                      <img
+                      <img key={`baseline-${report.finish_id}`}
                         src={`/api/calibration-reports/${report.finish_id}/validation/product_baseline.png`}
                         alt="product baseline"
                         className="w-full rounded-lg border bg-gray-50"
@@ -415,7 +415,7 @@ export function AdminCalibrationViewer() {
                     </div>
                     <div>
                       <div className="text-xs text-gray-500 mb-1">校准后 (candidate)</div>
-                      <img
+                      <img key={`candidate-${report.finish_id}`}
                         src={`/api/calibration-reports/${report.finish_id}/validation/product_candidate.png`}
                         alt="product candidate"
                         className="w-full rounded-lg border bg-gray-50"
