@@ -44,6 +44,8 @@ export function AdminCalibrationViewer() {
   const [trialImages, setTrialImages] = useState<{ filename: string; trial_id: string; score: number | null }[]>([]);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [showFullGrid, setShowFullGrid] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [pickMsg, setPickMsg] = useState('');
   const [recent, setRecent] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('calv_recent') || '[]'); } catch { return []; }
   });
@@ -265,7 +267,24 @@ export function AdminCalibrationViewer() {
                   <div className="mb-4">
                     <img src={`/api/calibration-reports/${report.finish_id}/images/${selectedImage}`}
                       alt={selectedImage} className="w-full max-w-lg mx-auto rounded-lg border shadow-lg" />
-                    <div className="text-center text-xs text-gray-400 mt-1">{selectedImage}</div>
+                    <div className="flex items-center justify-center gap-3 mt-2">
+                      <span className="text-xs text-gray-400">{selectedImage}</span>
+                      <button onClick={async () => {
+                        setPicking(true); setPickMsg('');
+                        try {
+                          await axios.post(`/api/calibration-reports/${report.finish_id}/select-trial`,
+                            { filename: selectedImage });
+                          setPickMsg('已保存为人眼最佳');
+                        } catch (err: any) {
+                          setPickMsg('保存失败: ' + (err.response?.data?.detail || err.message));
+                        }
+                        setPicking(false);
+                      }} disabled={picking}
+                        className="text-xs px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">
+                        {picking ? '保存中...' : '选择为人眼最佳'}
+                      </button>
+                    </div>
+                    {pickMsg && <div className="text-center text-xs mt-1 text-green-600">{pickMsg}</div>}
                   </div>
                 )}
 
