@@ -387,7 +387,7 @@ export function AdminCalibrationViewer() {
 
               {/* Product transfer validation (baseline vs candidate) */}
               {report.validation && (
-                <div className="bg-white rounded-lg shadow p-4">
+                <div key={`validation-${loadKey}`} className="bg-white rounded-lg shadow p-4">
                   <div className="flex items-center justify-between mb-3">
                     <div className="text-xs font-semibold text-gray-500 uppercase">产品迁移验证</div>
                     <span className={`text-xs px-2 py-0.5 rounded ${
