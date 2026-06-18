@@ -39,6 +39,34 @@ interface Mapping {
   overridden: boolean;
 }
 
+interface CategoryCandidate {
+  candidate_id: string;
+  stage: number;
+  trial: number;
+  score: number;
+  auto_rank: number;
+  params: Record<string, number>;
+  image: string;
+  dims?: Record<string, number>;
+}
+
+interface CategoryReport {
+  category: string;
+  run_id: string;
+  camera_mode: string;
+  model_path?: string;
+  use_vlm?: boolean;
+  elapsed_s?: number;
+  total_trials?: number;
+  review_stage?: number;
+  auto_best?: { score: number; params: Record<string, number>; image?: string };
+  candidates?: CategoryCandidate[];
+  human_pick?: { candidate_id: string; timestamp?: string };
+  baseline_cv_score?: number;
+  competitor_coarse_ok?: boolean;
+  competitor_fine_ok?: boolean;
+}
+
 export function AdminCalibrationViewer() {
   const [finishName, setFinishName] = useState('');
   const [report, setReport] = useState<CalibrationReport | null>(null);
@@ -46,13 +74,24 @@ export function AdminCalibrationViewer() {
   const [finishes, setFinishes] = useState<{ id: string; label_zh: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [tab, setTab] = useState<'viewer' | 'mapping'>('viewer');
+  const [tab, setTab] = useState<'viewer' | 'mapping' | 'category'>('viewer');
   const [trialImages, setTrialImages] = useState<{ filename: string; trial_id: string; score: number | null }[]>([]);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [showFullGrid, setShowFullGrid] = useState(false);
   const [picking, setPicking] = useState(false);
   const [pickMsg, setPickMsg] = useState('');
   const [loadKey, setLoadKey] = useState(0);
+  const [categoryName, setCategoryName] = useState('');
+  const [cameraMode, setCameraMode] = useState<'fullshot' | 'detail'>('fullshot');
+  const [categoryReport, setCategoryReport] = useState<CategoryReport | null>(null);
+  const [selectedCandidate, setSelectedCandidate] = useState<string | null>(null);
+  const [categoryLoading, setCategoryLoading] = useState(false);
+  const [categoryError, setCategoryError] = useState('');
+  const [categoryPickMsg, setCategoryPickMsg] = useState('');
+  const [categoryLoadKey, setCategoryLoadKey] = useState(0);
+  const [recentCategories, setRecentCategories] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('calv_recent_cat') || '[]'); } catch { return []; }
+  });
   const [recent, setRecent] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('calv_recent') || '[]'); } catch { return []; }
   });
@@ -67,6 +106,36 @@ export function AdminCalibrationViewer() {
     const next = [name, ...recent.filter(n => n !== name)].slice(0, 10);
     setRecent(next);
     localStorage.setItem('calv_recent', JSON.stringify(next));
+  };
+
+  const saveRecentCategory = (name: string) => {
+    const next = [name, ...recentCategories.filter(n => n !== name)].slice(0, 10);
+    setRecentCategories(next);
+    localStorage.setItem('calv_recent_cat', JSON.stringify(next));
+  };
+
+  const loadCategoryReport = async () => {
+    const name = categoryName.trim();
+    if (!name) return;
+    setCategoryLoading(true);
+    setCategoryError('');
+    setSelectedCandidate(null);
+    setCategoryPickMsg('');
+    try {
+      const res = await axios.get(`/api/category-calibration-reports/${name}`, {
+        params: { camera_mode: cameraMode },
+      });
+      setCategoryReport(res.data);
+      saveRecentCategory(name);
+      setTab('category');
+      setCategoryLoadKey(k => k + 1);
+    } catch (err: any) {
+      setCategoryError(err.response?.status === 404
+        ? `未找到 "${name}" 的类目校准报告，请先运行 calibrate.py --mode category --category ${name}`
+        : `加载失败: ${err.message}`);
+      setCategoryReport(null);
+    }
+    setCategoryLoading(false);
   };
 
   const loadReport = async () => {
@@ -157,13 +226,17 @@ export function AdminCalibrationViewer() {
 
   return (
     <div className="max-w-5xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">材质校准</h1>
+      <h1 className="text-2xl font-bold mb-4">校准管理</h1>
 
       {/* Tab bar */}
       <div className="flex gap-2 mb-6 border-b pb-2">
         <button onClick={() => setTab('viewer')}
           className={`px-4 py-2 text-sm rounded-t ${tab === 'viewer' ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-600' : 'text-gray-600'}`}>
-          校准报告
+          材质校准
+        </button>
+        <button onClick={() => setTab('category')}
+          className={`px-4 py-2 text-sm rounded-t ${tab === 'category' ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-600' : 'text-gray-600'}`}>
+          类目校准
         </button>
         <button onClick={() => setTab('mapping')}
           className={`px-4 py-2 text-sm rounded-t ${tab === 'mapping' ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-600' : 'text-gray-600'}`}>
@@ -437,6 +510,144 @@ export function AdminCalibrationViewer() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+        </>
+      )}
+
+      {tab === 'category' && (
+        <>
+          <div className="flex items-start gap-3 mb-4 flex-wrap">
+            <select value={categoryName} onChange={e => setCategoryName(e.target.value)}
+              className="px-3 py-2 border rounded-lg text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
+              <option value="">— 选择产品类目 —</option>
+              {mappings.map(m => (
+                <option key={m.category_key} value={m.category_key}>{m.category_key}</option>
+              ))}
+            </select>
+            <input value={categoryName} onChange={e => setCategoryName(e.target.value)}
+              placeholder="或直接输入 category key"
+              className="px-3 py-2 border rounded-lg text-sm w-48 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+            <select value={cameraMode} onChange={e => setCameraMode(e.target.value as 'fullshot' | 'detail')}
+              className="px-3 py-2 border rounded-lg text-sm bg-white">
+              <option value="fullshot">fullshot</option>
+              <option value="detail">detail</option>
+            </select>
+            <button onClick={loadCategoryReport} disabled={categoryLoading}
+              className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50">
+              {categoryLoading ? '加载中...' : '查看'}
+            </button>
+            {recentCategories.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs text-gray-400">最近:</span>
+                {recentCategories.map(n => (
+                  <button key={n} onClick={() => { setCategoryName(n); setTimeout(loadCategoryReport, 0); }}
+                    className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200">{n}</button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {categoryError && <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded">{categoryError}</div>}
+
+          {!categoryReport && !categoryLoading && !categoryError && (
+            <div className="text-center py-16 text-gray-400 text-sm">
+              <p className="mb-1">选择产品类目查看校准候选</p>
+              <p className="text-xs">python scripts/calibrate.py --mode category --category &lt;key&gt; --no-auto-write</p>
+            </div>
+          )}
+
+          {categoryReport && (
+            <div className="space-y-4">
+              <div className="bg-white rounded-lg shadow p-4">
+                <div className="flex flex-wrap gap-4 text-sm">
+                  <div><span className="text-gray-400">类目</span> <span className="font-mono">{categoryReport.category}</span></div>
+                  <div><span className="text-gray-400">相机</span> {categoryReport.camera_mode}</div>
+                  <div><span className="text-gray-400">自动最佳</span> {categoryReport.auto_best?.score?.toFixed(2)}</div>
+                  <div><span className="text-gray-400">试验</span> {categoryReport.total_trials}</div>
+                  <div><span className="text-gray-400">耗时</span> {categoryReport.elapsed_s}s</div>
+                  {categoryReport.human_pick && (
+                    <div className="text-green-700">已人眼选定: {categoryReport.human_pick.candidate_id}</div>
+                  )}
+                </div>
+              </div>
+
+              {selectedCandidate && categoryReport.candidates && (
+                <div className="bg-white rounded-lg shadow p-4">
+                  {(() => {
+                    const cand = categoryReport.candidates!.find(c => c.candidate_id === selectedCandidate);
+                    if (!cand?.image) return null;
+                    const cat = categoryReport.category;
+                    const mode = categoryReport.camera_mode || cameraMode;
+                    return (
+                      <>
+                        <img key={`cat-${categoryLoadKey}-${cand.image}`}
+                          src={`/api/category-calibration-reports/${cat}/images/${cand.image}?camera_mode=${mode}&_t=${categoryLoadKey}`}
+                          alt={cand.candidate_id}
+                          className="w-full max-w-2xl mx-auto rounded-lg border shadow-lg" />
+                        <div className="flex items-center justify-center gap-3 mt-3 flex-wrap">
+                          <span className="text-xs text-gray-400">{cand.candidate_id} · score {cand.score.toFixed(2)}</span>
+                          <button onClick={async () => {
+                            setPicking(true); setCategoryPickMsg('');
+                            try {
+                              await axios.post(`/api/category-calibration-reports/${cat}/select-candidate`, {
+                                candidate_id: selectedCandidate,
+                                camera_mode: mode,
+                              });
+                              setCategoryPickMsg('已写入 product_presets.json');
+                              loadCategoryReport();
+                            } catch (err: any) {
+                              setCategoryPickMsg('保存失败: ' + (err.response?.data?.detail || err.message));
+                            }
+                            setPicking(false);
+                          }} disabled={picking}
+                            className="text-xs px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">
+                            {picking ? '保存中...' : '选为人眼最佳并写入 preset'}
+                          </button>
+                        </div>
+                        {categoryPickMsg && <div className="text-center text-xs mt-2 text-green-600">{categoryPickMsg}</div>}
+                        <div className="mt-3 text-xs text-gray-500 font-mono break-all">
+                          {Object.entries(cand.params).slice(0, 8).map(([k, v]) => `${k}=${v}`).join(' · ')}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+
+              <div className="bg-white rounded-lg shadow p-4">
+                <div className="text-xs font-semibold text-gray-500 uppercase mb-3">
+                  Top-{categoryReport.candidates?.length || 0} 候选 (Stage {categoryReport.review_stage})
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                  {(categoryReport.candidates || []).map(cand => (
+                    <button key={cand.candidate_id}
+                      onClick={() => setSelectedCandidate(
+                        selectedCandidate === cand.candidate_id ? null : cand.candidate_id
+                      )}
+                      className={`relative rounded-lg border-2 overflow-hidden text-left transition-colors ${
+                        selectedCandidate === cand.candidate_id ? 'border-blue-600 ring-2 ring-blue-300' : 'border-gray-200 hover:border-blue-400'
+                      }`}>
+                      {cand.auto_rank === 1 && (
+                        <span className="absolute top-1 left-1 z-10 text-[10px] px-1 py-0.5 bg-amber-400 text-amber-900 rounded">AUTO #1</span>
+                      )}
+                      {cand.image ? (
+                        <img src={`/api/category-calibration-reports/${categoryReport.category}/images/${cand.image}?camera_mode=${categoryReport.camera_mode || cameraMode}&_t=${categoryLoadKey}`}
+                          alt={cand.candidate_id}
+                          className="w-full aspect-square object-cover bg-gray-50"
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        />
+                      ) : (
+                        <div className="w-full aspect-square bg-gray-100 flex items-center justify-center text-xs text-gray-400">无图</div>
+                      )}
+                      <div className="p-2 text-xs">
+                        <div className="font-mono">{cand.candidate_id}</div>
+                        <div className="text-gray-500">{cand.score.toFixed(2)}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
         </>

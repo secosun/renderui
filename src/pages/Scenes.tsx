@@ -1,8 +1,17 @@
 import { useState, useEffect } from 'react';
+import axios from 'axios';
 import { listUserScenes, createScene, updateScene, deleteScene, type SceneDetail } from '../api/client';
+
+interface EngineScene {
+  id: string;
+  name: string;
+  description: string;
+  tags: string[];
+}
 
 export function Scenes() {
   const [scenes, setScenes] = useState<SceneDetail[]>([]);
+  const [engineScenes, setEngineScenes] = useState<EngineScene[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
@@ -12,7 +21,13 @@ export function Scenes() {
 
   const load = () => {
     setLoading(true);
-    listUserScenes().then(d => setScenes(d.scenes)).finally(() => setLoading(false));
+    Promise.all([
+      listUserScenes(),
+      axios.get('/api/scenes-engine').then(r => r.data.scenes || []).catch(() => []),
+    ]).then(([scenesRes, engineScenesRes]) => {
+      setScenes(scenesRes.scenes);
+      setEngineScenes(engineScenesRes);
+    }).finally(() => setLoading(false));
   };
   useEffect(load, []);
 
@@ -103,14 +118,28 @@ export function Scenes() {
         </div>
       )}
 
-      <h2 className="font-medium mb-3 text-gray-700">系统预设场景</h2>
+      <h2 className="font-medium mb-3 text-gray-700">视觉场景</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+        {engineScenes.map(s => (
+          <div key={s.id} className="bg-white border rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-1">
+              <div className="font-medium">{s.name}</div>
+              <div className="flex gap-1">
+                {s.tags?.map(t => (
+                  <span key={t} className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded">{t}</span>
+                ))}
+              </div>
+            </div>
+            {s.description && <div className="text-xs text-gray-500">{s.description}</div>}
+            <div className="mt-2 text-xs text-gray-400 font-mono">{s.id}</div>
+          </div>
+        ))}
         {systemScenes.map(s => (
           <div key={s.id} className="bg-white border rounded-lg p-4 shadow-sm">
             <div className="font-medium">{s.name}</div>
             <div className="text-xs text-gray-400 mb-1">{s.category}</div>
             {s.description && <div className="text-xs text-gray-500">{s.description}</div>}
-            <div className="mt-2 text-xs text-gray-300">系统预设</div>
+            <div className="mt-2 text-xs text-gray-300">旧版预设</div>
           </div>
         ))}
       </div>
