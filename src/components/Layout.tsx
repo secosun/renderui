@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { TaskNotificationProvider } from './TaskNotificationProvider';
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
@@ -10,6 +11,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const handleLogout = () => { logout(); navigate('/login'); };
 
   return (
+    <TaskNotificationProvider>
     <div className="h-screen flex flex-col bg-gray-50">
       {/* Nav */}
       <nav className="bg-white border-b border-gray-200 px-4 py-3 shrink-0">
@@ -91,5 +93,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {children}
       </main>
     </div>
+    </TaskNotificationProvider>
   );
 }
