@@ -308,13 +308,33 @@ export function AdminCalibrationViewer() {
 
                 {trialImages.length > 0 && (
                   <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
-                    {trialImages.map(img => (
+                    {(() => {
+                      // Best trial number from confirm stage
+                      const bestTrialNum = report.confirm_stage?.candidates?.length
+                        ? report.confirm_stage.candidates.reduce((a, b) =>
+                            (a.confirm_score || 0) >= (b.confirm_score || 0) ? a : b
+                          ).source_trial
+                        : null;
+                      const parseTrialNum = (fn: string) => {
+                        const m = fn.match(/trial_(\d+)/);
+                        return m ? parseInt(m[1]) : null;
+                      };
+                      return trialImages.map(img => {
+                        const isBest = bestTrialNum !== null && parseTrialNum(img.filename) === bestTrialNum;
+                        return (
                       <button key={img.filename} onClick={() => setSelectedImage(
                         selectedImage === img.filename ? null : img.filename
                       )}
                         className={`relative rounded-lg border-2 overflow-hidden hover:border-blue-400 transition-colors ${
                           selectedImage === img.filename ? 'border-blue-600 ring-2 ring-blue-300' : 'border-gray-200'
                         }`}>
+                        {isBest && (
+                          <div className="absolute top-1 right-1 z-10 w-5 h-5 bg-red-600 rounded-full flex items-center justify-center shadow">
+                            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-white" fill="currentColor">
+                              <path d="M13.5 4.5L6 12l-3.5-3.5" stroke="white" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </div>
+                        )}
                         <img src={`/api/calibration-reports/${report.finish_id}/images/${img.filename}`}
                           alt={img.filename} className="w-full aspect-square object-cover" />
                         {img.score !== null && img.score !== undefined && (
@@ -323,7 +343,9 @@ export function AdminCalibrationViewer() {
                           </div>
                         )}
                       </button>
-                    ))}
+                        );
+                      });
+                    })()}
                   </div>
                 )}
 
