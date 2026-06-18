@@ -13,9 +13,9 @@ const STORAGE_KEY = 'task_notify_cache';
 
 export function TaskNotificationProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<{ id: string; title: string; status: string }[]>([]);
-  const cacheRef = useRef<Record<string, string>>(() => {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; }
-  })();
+  const cacheRef = useRef<Record<string, string>>(
+    (() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; } })()
+  );
 
   useEffect(() => {
     if ('Notification' in window && Notification.permission === 'default') {
