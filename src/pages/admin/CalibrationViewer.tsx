@@ -41,6 +41,9 @@ export function AdminCalibrationViewer() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [tab, setTab] = useState<'viewer' | 'mapping'>('viewer');
+  const [trialImages, setTrialImages] = useState<{ filename: string; trial_id: string; score: number | null }[]>([]);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [showFullGrid, setShowFullGrid] = useState(false);
   const [recent, setRecent] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('calv_recent') || '[]'); } catch { return []; }
   });
@@ -62,9 +65,15 @@ export function AdminCalibrationViewer() {
     if (!name) return;
     setLoading(true);
     setError('');
+    setSelectedImage(null);
+    setShowFullGrid(false);
     try {
-      const res = await axios.get(`/api/calibration-reports/${name}`);
-      setReport(res.data);
+      const [reportRes, trialsRes] = await Promise.all([
+        axios.get(`/api/calibration-reports/${name}`),
+        axios.get(`/api/calibration-reports/${name}/trials`).catch(() => ({ data: { images: [] } })),
+      ]);
+      setReport(reportRes.data);
+      setTrialImages(trialsRes.data.images || []);
       saveRecent(name);
       setTab('viewer');
     } catch (err: any) {
@@ -237,15 +246,55 @@ export function AdminCalibrationViewer() {
                 <canvas ref={canvasRef} className="w-full h-20" style={{ maxHeight: 80 }} />
               </div>
 
-              {/* Summary grid */}
+              {/* Trial images gallery */}
               <div className="bg-white rounded-lg shadow p-4">
-                <div className="text-xs font-semibold text-gray-500 uppercase mb-3">渲染对比</div>
-                <img
-                  src={`/api/calibration-reports/${report.finish_id}/grid`}
-                  alt="00_summary_grid.png"
-                  className="w-full rounded-lg border"
-                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                />
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-xs font-semibold text-gray-500 uppercase">渲染对比</div>
+                  <button onClick={() => setShowFullGrid(!showFullGrid)}
+                    className="text-xs text-blue-600 hover:underline">
+                    {showFullGrid ? '关闭汇总图' : '查看汇总图'}
+                  </button>
+                </div>
+
+                {showFullGrid && (
+                  <img src={`/api/calibration-reports/${report.finish_id}/grid`} alt="summary grid"
+                    className="w-full rounded-lg border mb-4" />
+                )}
+
+                {selectedImage && (
+                  <div className="mb-4">
+                    <img src={`/api/calibration-reports/${report.finish_id}/images/${selectedImage}`}
+                      alt={selectedImage} className="w-full max-w-lg mx-auto rounded-lg border shadow-lg" />
+                    <div className="text-center text-xs text-gray-400 mt-1">{selectedImage}</div>
+                  </div>
+                )}
+
+                {trialImages.length > 0 && (
+                  <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                    {trialImages.map(img => (
+                      <button key={img.filename} onClick={() => setSelectedImage(
+                        selectedImage === img.filename ? null : img.filename
+                      )}
+                        className={`relative rounded-lg border-2 overflow-hidden hover:border-blue-400 transition-colors ${
+                          selectedImage === img.filename ? 'border-blue-600 ring-2 ring-blue-300' : 'border-gray-200'
+                        }`}>
+                        <img src={`/api/calibration-reports/${report.finish_id}/images/${img.filename}`}
+                          alt={img.filename} className="w-full aspect-square object-cover" />
+                        {img.score !== null && img.score !== undefined && (
+                          <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] px-1 py-0.5 text-center truncate">
+                            {img.score.toFixed(2)}
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {trialImages.length === 0 && (
+                  <div className="text-center py-8 text-gray-400 text-sm">
+                    trial 图片未找到（镜像资产未挂载）
+                  </div>
+                )}
               </div>
 
               {/* Confirm stage */}
