@@ -137,17 +137,27 @@ export function AdminCalibrationViewer() {
       {tab === 'viewer' && (
         <>
           {/* Load bar */}
-          <div className="flex items-center gap-3 mb-4">
-            <input value={finishName} onChange={e => setFinishName(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && loadReport()}
-              placeholder="finish 名称 (如 powder_matte)"
-              className="px-3 py-2 border rounded-lg text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+          <div className="flex items-start gap-3 mb-4">
+            <div className="relative">
+              <div className="flex gap-2 items-center">
+                <select value={finishName} onChange={e => setFinishName(e.target.value)}
+                  className="px-3 py-2 border rounded-lg text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
+                  <option value="">— 选择材质 —</option>
+                  {finishes.map(f => (
+                    <option key={f.id} value={f.id}>{f.label_zh} ({f.id})</option>
+                  ))}
+                </select>
+                <input value={finishName} onChange={e => setFinishName(e.target.value)}
+                  placeholder="或直接输入 finish id"
+                  className="px-3 py-2 border rounded-lg text-sm w-40 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+              </div>
+            </div>
             <button onClick={loadReport} disabled={loading}
               className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50">
               {loading ? '加载中...' : '查看'}
             </button>
             {recent.length > 0 && (
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-xs text-gray-400">最近:</span>
                 {recent.map(n => (
                   <button key={n} onClick={() => { setFinishName(n); setTimeout(loadReport, 0); }}
