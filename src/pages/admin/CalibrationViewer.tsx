@@ -129,6 +129,24 @@ export function AdminCalibrationViewer() {
     }
   }, [report]);
 
+  // Keyboard navigation: ← → to switch trial images
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!selectedImage || trialImages.length === 0) return;
+      const idx = trialImages.findIndex(i => i.filename === selectedImage);
+      if (idx === -1) return;
+      if (e.key === 'ArrowRight') {
+        const next = trialImages[(idx + 1) % trialImages.length];
+        setSelectedImage(next.filename);
+      } else if (e.key === 'ArrowLeft') {
+        const prev = trialImages[(idx - 1 + trialImages.length) % trialImages.length];
+        setSelectedImage(prev.filename);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selectedImage, trialImages]);
+
   return (
     <div className="max-w-5xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">材质校准</h1>
