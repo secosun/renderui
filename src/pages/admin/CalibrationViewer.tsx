@@ -52,6 +52,7 @@ export function AdminCalibrationViewer() {
   const [showFullGrid, setShowFullGrid] = useState(false);
   const [picking, setPicking] = useState(false);
   const [pickMsg, setPickMsg] = useState('');
+  const [loadKey, setLoadKey] = useState(0);
   const [recent, setRecent] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('calv_recent') || '[]'); } catch { return []; }
   });
@@ -84,6 +85,7 @@ export function AdminCalibrationViewer() {
       setTrialImages(trialsRes.data.images || []);
       saveRecent(name);
       setTab('viewer');
+      setLoadKey(k => k + 1);
     } catch (err: any) {
       setError(err.response?.status === 404
         ? `未找到 "${name}" 的校准报告，请先运行 calibrate.py --mode material --finish-id ${name}`
@@ -289,7 +291,7 @@ export function AdminCalibrationViewer() {
 
                 {selectedImage && (
                   <div className="mb-4">
-                    <img key={selectedImage} src={`/api/calibration-reports/${report.finish_id}/images/${selectedImage}`}
+                    <img key={`trial-${loadKey}-${selectedImage}`} src={`/api/calibration-reports/${report.finish_id}/images/${selectedImage}`}
                       alt={selectedImage} className="w-full max-w-lg mx-auto rounded-lg border shadow-lg" />
                     <div className="flex items-center justify-center gap-3 mt-2">
                       <span className="text-xs text-gray-400">{selectedImage}</span>
@@ -403,8 +405,8 @@ export function AdminCalibrationViewer() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
                     <div>
                       <div className="text-xs text-gray-500 mb-1">校准前 (baseline)</div>
-                      <img key={`baseline-${report.finish_id}`}
-                        src={`/api/calibration-reports/${report.finish_id}/validation/product_baseline.png`}
+                      <img key={`baseline-${loadKey}`}
+                        src={`/api/calibration-reports/${report.finish_id}/validation/product_baseline.png?_t=${loadKey}`}
                         alt="product baseline"
                         className="w-full rounded-lg border bg-gray-50"
                         onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
@@ -415,8 +417,8 @@ export function AdminCalibrationViewer() {
                     </div>
                     <div>
                       <div className="text-xs text-gray-500 mb-1">校准后 (candidate)</div>
-                      <img key={`candidate-${report.finish_id}`}
-                        src={`/api/calibration-reports/${report.finish_id}/validation/product_candidate.png`}
+                      <img key={`candidate-${loadKey}`}
+                        src={`/api/calibration-reports/${report.finish_id}/validation/product_candidate.png?_t=${loadKey}`}
                         alt="product candidate"
                         className="w-full rounded-lg border bg-gray-50"
                         onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
