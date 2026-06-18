@@ -26,6 +26,7 @@ import { Support } from './pages/Support';
 import { BatchRender } from './pages/BatchRender';
 import { AdminTemplates } from './pages/admin/Templates';
 import { AdminFinishes } from './pages/admin/Finishes';
+import { AdminCalibrationViewer } from './pages/admin/CalibrationViewer';
 import { AdminTickets } from './pages/admin/Tickets';
 
 function App() {
@@ -57,6 +58,7 @@ function App() {
             <Route path="/admin" element={<ProtectedRoute><AdminRoute><AdminDashboard /></AdminRoute></ProtectedRoute>} />
             <Route path="/admin/templates" element={<ProtectedRoute><AdminRoute><AdminTemplates /></AdminRoute></ProtectedRoute>} />
             <Route path="/admin/finishes" element={<ProtectedRoute><AdminRoute><AdminFinishes /></AdminRoute></ProtectedRoute>} />
+            <Route path="/admin/calibration" element={<ProtectedRoute><AdminRoute><AdminCalibrationViewer /></AdminRoute></ProtectedRoute>} />
             <Route path="/admin/tickets" element={<ProtectedRoute><AdminRoute><AdminTickets /></AdminRoute></ProtectedRoute>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
