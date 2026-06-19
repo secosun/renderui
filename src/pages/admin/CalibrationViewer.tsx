@@ -1,5 +1,22 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import axios from 'axios';
+
+interface PhaseBest {
+  roughness?: number;
+  metallic?: number;
+  specular?: number;
+  coat_weight?: number;
+  coat_roughness?: number;
+  bump_mult?: number;
+  anisotropic?: number;
+  anisotropic_rotation?: number;
+  micro_scale?: number;
+  micro_detail?: number;
+  fine_scale?: number;
+  rough_mix?: number;
+  score?: number;
+  phase?: string;
+}
 
 interface CalibrationReport {
   finish_id?: string;
@@ -13,10 +30,15 @@ interface CalibrationReport {
   best?: Record<string, number>;
   trial_stats?: Record<string, number>;
   trial_scores?: number[];
+  calibration_phases?: {
+    mode?: string;
+    pbr?: PhaseBest;
+    texture?: PhaseBest;
+  };
   confirm_stage?: {
     top_k: number;
     samples: number;
-    candidates: { source_trial: number; search_score: number; confirm_score: number }[];
+    candidates: { source_trial: number; search_score: number; confirm_score: number; path?: string }[];
   };
   validation?: {
     passed?: boolean;
@@ -31,6 +53,13 @@ interface CalibrationReport {
     baseline_gate_ok?: boolean;
     candidate_gate_ok?: boolean;
   };
+}
+
+interface TrialImage {
+  filename: string;
+  trial_id: string;
+  score: number | null;
+  phase?: string;
 }
 
 interface Mapping {
@@ -75,9 +104,9 @@ export function AdminCalibrationViewer() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [tab, setTab] = useState<'viewer' | 'mapping' | 'category'>('viewer');
-  const [trialImages, setTrialImages] = useState<{ filename: string; trial_id: string; score: number | null }[]>([]);
+  const [trialImages, setTrialImages] = useState<TrialImage[]>([]);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [showFullGrid, setShowFullGrid] = useState(false);
+  const [navImages, setNavImages] = useState<TrialImage[]>([]);
   const [picking, setPicking] = useState(false);
   const [pickMsg, setPickMsg] = useState('');
   const [loadKey, setLoadKey] = useState(0);
@@ -144,7 +173,7 @@ export function AdminCalibrationViewer() {
     setLoading(true);
     setError('');
     setSelectedImage(null);
-    setShowFullGrid(false);
+    setNavImages([]);
     try {
       const [reportRes, trialsRes] = await Promise.all([
         axios.get(`/api/calibration-reports/${name}`),
@@ -206,23 +235,21 @@ export function AdminCalibrationViewer() {
     }
   }, [report]);
 
-  // Keyboard navigation: ← → to switch trial images
+  // Keyboard navigation: ← → within current gallery section
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!selectedImage || trialImages.length === 0) return;
-      const idx = trialImages.findIndex(i => i.filename === selectedImage);
+      if (!selectedImage || navImages.length === 0) return;
+      const idx = navImages.findIndex(i => i.filename === selectedImage);
       if (idx === -1) return;
       if (e.key === 'ArrowRight') {
-        const next = trialImages[(idx + 1) % trialImages.length];
-        setSelectedImage(next.filename);
+        setSelectedImage(navImages[(idx + 1) % navImages.length].filename);
       } else if (e.key === 'ArrowLeft') {
-        const prev = trialImages[(idx - 1 + trialImages.length) % trialImages.length];
-        setSelectedImage(prev.filename);
+        setSelectedImage(navImages[(idx - 1 + navImages.length) % navImages.length].filename);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectedImage, trialImages]);
+  }, [selectedImage, navImages]);
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -293,9 +320,20 @@ export function AdminCalibrationViewer() {
                 <div className="text-xs font-semibold text-gray-500 uppercase mb-3">校准概览</div>
                 <div className="grid grid-cols-4 gap-4">
                   <div><div className="text-xs text-gray-400">Finish</div><div className="text-lg font-semibold">{report.finish_id}</div></div>
+                  <div><div className="text-xs text-gray-400">模式</div><div className="text-lg font-semibold">
+                    {report.calibration_phases?.mode === 'two_phase' ? '两阶段' : '单阶段'}
+                  </div></div>
                   <div><div className="text-xs text-gray-400">搜索采样</div><div className="text-lg font-semibold">{report.search_samples || 256}</div></div>
                   <div><div className="text-xs text-gray-400">确认采样</div><div className="text-lg font-semibold">{report.confirm_samples || '-'}</div></div>
-                  <div><div className="text-xs text-gray-400">来源</div><div className="text-lg font-semibold">{report.selected_from || 'search'}</div></div>
+                </div>
+                <div className="mt-2 text-xs text-gray-400">
+                  来源 {report.selected_from || 'search'}
+                  {report.calibration_phases?.pbr?.score !== undefined && (
+                    <span> · PBR {report.calibration_phases.pbr.score.toFixed(2)}</span>
+                  )}
+                  {report.calibration_phases?.texture?.score !== undefined && (
+                    <span> · 纹理 {report.calibration_phases.texture.score.toFixed(2)}</span>
+                  )}
                 </div>
               </div>
 
@@ -347,120 +385,35 @@ export function AdminCalibrationViewer() {
                 <canvas ref={canvasRef} className="w-full h-20" style={{ maxHeight: 80 }} />
               </div>
 
-              {/* Trial images gallery */}
-              <div className="bg-white rounded-lg shadow p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="text-xs font-semibold text-gray-500 uppercase">渲染对比</div>
-                  <button onClick={() => setShowFullGrid(!showFullGrid)}
-                    className="text-xs text-blue-600 hover:underline">
-                    {showFullGrid ? '关闭汇总图' : '查看汇总图'}
-                  </button>
-                </div>
+              {/* Phased trial review: PBR → Texture → Confirm */}
+              <PhaseCalibrationReview
+                report={report}
+                trialImages={trialImages}
+                loadKey={loadKey}
+                selectedImage={selectedImage}
+                onSelectImage={(fn, sectionImages) => {
+                  setSelectedImage(fn);
+                  setNavImages(sectionImages);
+                }}
+                picking={picking}
+                pickMsg={pickMsg}
+                onPick={async (filename) => {
+                  if (!report.finish_id) return;
+                  setPicking(true); setPickMsg('');
+                  try {
+                    await axios.post(`/api/calibration-reports/${report.finish_id}/select-trial`,
+                      { filename });
+                    setPickMsg('已保存为人眼最佳');
+                  } catch (err: any) {
+                    setPickMsg('保存失败: ' + (err.response?.data?.detail || err.message));
+                  }
+                  setPicking(false);
+                }}
+              />
 
-                {showFullGrid && (
-                  <img src={`/api/calibration-reports/${report.finish_id}/grid`} alt="summary grid"
-                    className="w-full rounded-lg border mb-4" />
-                )}
-
-                {selectedImage && (
-                  <div className="mb-4">
-                    <img key={`trial-${loadKey}-${selectedImage}`} src={`/api/calibration-reports/${report.finish_id}/images/${selectedImage}`}
-                      alt={selectedImage} className="w-full max-w-lg mx-auto rounded-lg border shadow-lg" />
-                    <div className="flex items-center justify-center gap-3 mt-2">
-                      <span className="text-xs text-gray-400">{selectedImage}</span>
-                      <button onClick={async () => {
-                        setPicking(true); setPickMsg('');
-                        try {
-                          await axios.post(`/api/calibration-reports/${report.finish_id}/select-trial`,
-                            { filename: selectedImage });
-                          setPickMsg('已保存为人眼最佳');
-                        } catch (err: any) {
-                          setPickMsg('保存失败: ' + (err.response?.data?.detail || err.message));
-                        }
-                        setPicking(false);
-                      }} disabled={picking}
-                        className="text-xs px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">
-                        {picking ? '保存中...' : '选择为人眼最佳'}
-                      </button>
-                    </div>
-                    {pickMsg && <div className="text-center text-xs mt-1 text-green-600">{pickMsg}</div>}
-                  </div>
-                )}
-
-                {trialImages.length > 0 && (
-                  <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
-                    {(() => {
-                      // Best trial number from confirm stage
-                      const bestTrialNum = report.confirm_stage?.candidates?.length
-                        ? report.confirm_stage.candidates.reduce((a, b) =>
-                            (a.confirm_score || 0) >= (b.confirm_score || 0) ? a : b
-                          ).source_trial
-                        : null;
-                      const parseTrialNum = (fn: string) => {
-                        const m = fn.match(/trial_(\d+)/);
-                        return m ? parseInt(m[1]) : null;
-                      };
-                      return trialImages.map(img => {
-                        const isBest = bestTrialNum !== null && parseTrialNum(img.filename) === bestTrialNum;
-                        return (
-                      <button key={img.filename} onClick={() => setSelectedImage(
-                        selectedImage === img.filename ? null : img.filename
-                      )}
-                        className={`relative rounded-lg border-2 overflow-hidden hover:border-blue-400 transition-colors ${
-                          selectedImage === img.filename ? 'border-blue-600 ring-2 ring-blue-300' : 'border-gray-200'
-                        }`}>
-                        {isBest && (
-                          <div className="absolute top-1 right-1 z-10 w-5 h-5 bg-red-600 rounded-full flex items-center justify-center shadow">
-                            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-white" fill="currentColor">
-                              <path d="M13.5 4.5L6 12l-3.5-3.5" stroke="white" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                          </div>
-                        )}
-                        <img src={`/api/calibration-reports/${report.finish_id}/images/${img.filename}`}
-                          alt={img.filename} className="w-full aspect-square object-cover" />
-                        {img.score !== null && img.score !== undefined && (
-                          <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] px-1 py-0.5 text-center truncate">
-                            {img.score.toFixed(2)}
-                          </div>
-                        )}
-                      </button>
-                        );
-                      });
-                    })()}
-                  </div>
-                )}
-
-                {trialImages.length === 0 && (
-                  <div className="text-center py-8 text-gray-400 text-sm">
-                    trial 图片未找到（镜像资产未挂载）
-                  </div>
-                )}
-              </div>
-
-              {/* Texture profile info & combo preview */}
+              {/* Texture profile combo preview (post-calibration) */}
               {report.finish_id && (
                 <TexturePreview finishId={report.finish_id} />
-              )}
-
-              {/* Confirm stage */}
-              {report.confirm_stage?.candidates?.length && (
-                <div className="bg-white rounded-lg shadow p-4">
-                  <div className="text-xs font-semibold text-gray-500 uppercase mb-3">
-                    确认阶段 (Top-{report.confirm_stage.top_k} @ {report.confirm_stage.samples}spp)
-                  </div>
-                  <table className="w-full text-sm">
-                    <thead><tr className="text-left text-gray-400 text-xs"><th className="pb-2">Trial</th><th className="pb-2">搜索分</th><th className="pb-2">确认分</th></tr></thead>
-                    <tbody>
-                      {report.confirm_stage.candidates.map(c => (
-                        <tr key={c.source_trial} className="border-b border-gray-50">
-                          <td className="py-1.5">#{c.source_trial}</td>
-                          <td className="py-1.5 font-mono">{c.search_score.toFixed(3)}</td>
-                          <td className="py-1.5 font-mono">{c.confirm_score.toFixed(3)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
               )}
 
               {/* Product transfer validation (baseline vs candidate) */}
@@ -736,6 +689,361 @@ function MappingRow({ mapping, finishes, onUpdate }: {
         )}
       </td>
     </tr>
+  );
+}
+
+
+function calImageUrl(finishId: string, filename: string, review = true): string {
+  const path = review ? reviewFilename(filename) : filename;
+  const encoded = path.split('/').map(encodeURIComponent).join('/');
+  return `/api/calibration-reports/${finishId}/images/${encoded}`;
+}
+
+function reviewFilename(base: string): string {
+  const i = base.lastIndexOf('.');
+  if (i === -1) return `${base}_review`;
+  return `${base.slice(0, i)}_review${base.slice(i)}`;
+}
+
+function inferTrialPhase(img: TrialImage): string {
+  if (img.phase) return img.phase;
+  if (img.filename.startsWith('pbr/') || img.trial_id.startsWith('pbr_')) return 'pbr';
+  if (img.filename.startsWith('texture/') || img.trial_id.startsWith('tex_')) return 'texture';
+  if (img.trial_id.startsWith('confirm_t')) return 'confirm';
+  return 'legacy';
+}
+
+function splitTrialImages(images: TrialImage[]) {
+  const pbr: TrialImage[] = [];
+  const texture: TrialImage[] = [];
+  const confirm: TrialImage[] = [];
+  const legacy: TrialImage[] = [];
+  for (const img of images) {
+    const phase = inferTrialPhase(img);
+    if (phase === 'pbr') pbr.push(img);
+    else if (phase === 'texture') texture.push(img);
+    else if (phase === 'confirm') confirm.push(img);
+    else legacy.push(img);
+  }
+  return { pbr, texture, confirm, legacy };
+}
+
+function PhaseParamsBar({ label, params, keys }: {
+  label: string;
+  params?: PhaseBest;
+  keys: { key: keyof PhaseBest; fmt?: (v: number) => string }[];
+}) {
+  if (!params) return null;
+  const items = keys
+    .map(({ key, fmt }) => {
+      const v = params[key];
+      if (v === undefined || v === null) return null;
+      const text = typeof v === 'number' ? (fmt ? fmt(v) : v.toFixed(3)) : String(v);
+      return `${key}=${text}`;
+    })
+    .filter(Boolean);
+  if (!items.length) return null;
+  return (
+    <div className="mb-3 px-3 py-2 bg-slate-50 border border-slate-100 rounded-lg text-xs text-slate-600 font-mono">
+      <span className="text-slate-400 mr-2">{label}</span>
+      {items.join(' · ')}
+      {params.score !== undefined && (
+        <span className="ml-2 text-blue-600">score {params.score.toFixed(2)}</span>
+      )}
+    </div>
+  );
+}
+
+function CalTrialThumb({
+  finishId,
+  img,
+  selected,
+  highlight,
+  onClick,
+}: {
+  finishId: string;
+  img: TrialImage;
+  selected: boolean;
+  highlight?: boolean;
+  onClick: () => void;
+}) {
+  const [src, setSrc] = useState(() => calImageUrl(finishId, img.filename, true));
+  return (
+    <button type="button" onClick={onClick}
+      className={`relative rounded-lg border-2 overflow-hidden hover:border-blue-400 transition-colors ${
+        selected ? 'border-blue-600 ring-2 ring-blue-300' : 'border-gray-200'
+      }`}>
+      {highlight && (
+        <div className="absolute top-1 right-1 z-10 w-5 h-5 bg-red-600 rounded-full flex items-center justify-center shadow">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 text-white" fill="currentColor">
+            <path d="M13.5 4.5L6 12l-3.5-3.5" stroke="white" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
+      )}
+      <img
+        src={src}
+        alt={img.filename}
+        className="w-full aspect-square object-cover bg-gray-100"
+        onError={() => setSrc(calImageUrl(finishId, img.filename, false))}
+      />
+      {img.score !== null && img.score !== undefined && (
+        <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] px-1 py-0.5 text-center truncate">
+          {img.score.toFixed(2)}
+        </div>
+      )}
+    </button>
+  );
+}
+
+function TrialGallerySection({
+  finishId,
+  title,
+  step,
+  images,
+  gridPhase,
+  loadKey,
+  selectedImage,
+  onSelectImage,
+  lockedParams,
+  highlightTrialId,
+  emptyHint,
+}: {
+  finishId: string;
+  title: string;
+  step: number;
+  images: TrialImage[];
+  gridPhase?: string;
+  loadKey: number;
+  selectedImage: string | null;
+  onSelectImage: (fn: string | null, section: TrialImage[]) => void;
+  lockedParams?: ReactNode;
+  highlightTrialId?: string | null;
+  emptyHint?: string;
+}) {
+  const [showGrid, setShowGrid] = useState(false);
+  if (images.length === 0 && !lockedParams) return null;
+
+  return (
+    <div className="bg-white rounded-lg shadow p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">{step}</span>
+          <div className="text-xs font-semibold text-gray-500 uppercase">{title}</div>
+          {images.length > 0 && (
+            <span className="text-xs text-gray-400">({images.length})</span>
+          )}
+        </div>
+        {gridPhase && images.length > 0 && (
+          <button type="button" onClick={() => setShowGrid(!showGrid)}
+            className="text-xs text-blue-600 hover:underline">
+            {showGrid ? '关闭汇总图' : '查看汇总图'}
+          </button>
+        )}
+      </div>
+
+      {lockedParams}
+
+      {showGrid && gridPhase && (
+        <img
+          src={`/api/calibration-reports/${finishId}/grid?phase=${gridPhase}&_t=${loadKey}`}
+          alt={`${title} grid`}
+          className="w-full rounded-lg border mb-4"
+          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+        />
+      )}
+
+      {selectedImage && images.some(i => i.filename === selectedImage) && (
+        <div className="mb-4">
+          <img
+            key={`sel-${loadKey}-${selectedImage}`}
+            src={calImageUrl(finishId, selectedImage, true)}
+            alt={selectedImage}
+            className="w-full max-w-lg mx-auto rounded-lg border shadow-lg bg-gray-50"
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = calImageUrl(finishId, selectedImage, false);
+            }}
+          />
+          <div className="text-center text-xs text-gray-400 mt-2">{selectedImage}</div>
+        </div>
+      )}
+
+      {images.length > 0 ? (
+        <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+          {images.map(img => (
+            <CalTrialThumb
+              key={img.filename}
+              finishId={finishId}
+              img={img}
+              selected={selectedImage === img.filename}
+              highlight={!!highlightTrialId && img.trial_id.startsWith(highlightTrialId)}
+              onClick={() => onSelectImage(
+                selectedImage === img.filename ? null : img.filename,
+                images,
+              )}
+            />
+          ))}
+        </div>
+      ) : (
+        emptyHint && <div className="text-center py-4 text-gray-400 text-sm">{emptyHint}</div>
+      )}
+    </div>
+  );
+}
+
+function PhaseCalibrationReview({
+  report,
+  trialImages,
+  loadKey,
+  selectedImage,
+  onSelectImage,
+  picking,
+  pickMsg,
+  onPick,
+}: {
+  report: CalibrationReport;
+  trialImages: TrialImage[];
+  loadKey: number;
+  selectedImage: string | null;
+  onSelectImage: (fn: string | null, section: TrialImage[]) => void;
+  picking: boolean;
+  pickMsg: string;
+  onPick: (filename: string) => void;
+}) {
+  const finishId = report.finish_id || '';
+  const { pbr, texture, confirm, legacy } = splitTrialImages(trialImages);
+  const isTwoPhase = report.calibration_phases?.mode === 'two_phase' || pbr.length > 0 || texture.length > 0;
+
+  const bestConfirm = report.confirm_stage?.candidates?.length
+    ? report.confirm_stage.candidates.reduce((a, b) =>
+        (a.confirm_score || 0) >= (b.confirm_score || 0) ? a : b
+      )
+    : null;
+  const bestConfirmId = bestConfirm
+    ? `confirm_t${String(bestConfirm.source_trial).padStart(3, '0')}`
+    : null;
+
+  const pbrKeys: { key: keyof PhaseBest; fmt?: (v: number) => string }[] = [
+    { key: 'roughness' }, { key: 'metallic' }, { key: 'specular' },
+    { key: 'anisotropic' }, { key: 'coat_weight' },
+  ];
+  const texKeys: { key: keyof PhaseBest; fmt?: (v: number) => string }[] = [
+    { key: 'bump_mult', fmt: v => `×${v.toFixed(2)}` },
+    { key: 'micro_scale', fmt: v => v.toFixed(0) },
+    { key: 'fine_scale', fmt: v => v.toFixed(0) },
+    { key: 'rough_mix' },
+  ];
+
+  const pickable = selectedImage && (
+    selectedImage.includes('trial_') || selectedImage.includes('pbr_')
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="text-xs font-semibold text-gray-500 uppercase px-1">分阶段复核</div>
+
+      {isTwoPhase ? (
+        <>
+          <TrialGallerySection
+            finishId={finishId}
+            step={1}
+            title="PBR 宏观"
+            images={pbr}
+            gridPhase="pbr"
+            loadKey={loadKey}
+            selectedImage={selectedImage}
+            onSelectImage={onSelectImage}
+            lockedParams={
+              <PhaseParamsBar label="Phase 1 最优" params={report.calibration_phases?.pbr} keys={pbrKeys} />
+            }
+            emptyHint="无 PBR trial 图（可能为旧版平铺目录或未挂载 calibrate_out）"
+          />
+
+          <TrialGallerySection
+            finishId={finishId}
+            step={2}
+            title="纹理细节"
+            images={texture}
+            gridPhase="texture"
+            loadKey={loadKey}
+            selectedImage={selectedImage}
+            onSelectImage={onSelectImage}
+            lockedParams={
+              <>
+                <PhaseParamsBar label="锁定 PBR" params={report.calibration_phases?.pbr} keys={pbrKeys} />
+                <PhaseParamsBar label="Phase 2 最优" params={report.calibration_phases?.texture} keys={texKeys} />
+              </>
+            }
+            emptyHint="无纹理 trial 图（可能使用了 --skip-texture）"
+          />
+
+          <TrialGallerySection
+            finishId={finishId}
+            step={3}
+            title={`确认 @ ${report.confirm_stage?.samples || 1024}spp`}
+            images={confirm}
+            loadKey={loadKey}
+            selectedImage={selectedImage}
+            onSelectImage={onSelectImage}
+            highlightTrialId={bestConfirmId}
+            emptyHint="无 confirm 图（可能使用了 --skip-confirm）"
+          />
+        </>
+      ) : (
+        <TrialGallerySection
+          finishId={finishId}
+          step={1}
+          title="搜索 Trial"
+          images={legacy.length ? legacy : trialImages}
+          loadKey={loadKey}
+          selectedImage={selectedImage}
+          onSelectImage={onSelectImage}
+          emptyHint="trial 图片未找到（镜像资产未挂载）"
+        />
+      )}
+
+      {report.confirm_stage?.candidates?.length ? (
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="text-xs font-semibold text-gray-500 uppercase mb-3">
+            确认分数表 (Top-{report.confirm_stage.top_k})
+          </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-gray-400 text-xs">
+                <th className="pb-2">Trial</th>
+                <th className="pb-2">搜索分</th>
+                <th className="pb-2">确认分</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.confirm_stage.candidates.map(c => (
+                <tr key={c.source_trial} className="border-b border-gray-50">
+                  <td className="py-1.5">#{c.source_trial}</td>
+                  <td className="py-1.5 font-mono">{c.search_score.toFixed(3)}</td>
+                  <td className="py-1.5 font-mono font-semibold">{c.confirm_score.toFixed(3)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+
+      {selectedImage && pickable && (
+        <div className="flex items-center justify-center gap-3">
+          <button type="button" onClick={() => onPick(selectedImage)} disabled={picking}
+            className="text-xs px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">
+            {picking ? '保存中...' : '选择为人眼最佳'}
+          </button>
+          {pickMsg && <span className="text-xs text-green-600">{pickMsg}</span>}
+        </div>
+      )}
+
+      {!isTwoPhase && trialImages.length > 0 && (
+        <div className="text-center">
+          <a href={`/api/calibration-reports/${finishId}/grid`} target="_blank" rel="noreferrer"
+            className="text-xs text-blue-600 hover:underline">查看全量汇总图</a>
+        </div>
+      )}
+    </div>
   );
 }
 
