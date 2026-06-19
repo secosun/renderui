@@ -27,7 +27,6 @@ import { BatchRender } from './pages/BatchRender';
 import { AdminTemplates } from './pages/admin/Templates';
 import { AdminFinishes } from './pages/admin/Finishes';
 import { AdminCalibrationViewer } from './pages/admin/CalibrationViewer';
-import { PreviewPanel } from './pages/admin/PreviewPanel';
 import { AdminTickets } from './pages/admin/Tickets';
 
 function App() {
@@ -60,7 +59,6 @@ function App() {
             <Route path="/admin/templates" element={<ProtectedRoute><AdminRoute><AdminTemplates /></AdminRoute></ProtectedRoute>} />
             <Route path="/admin/finishes" element={<ProtectedRoute><AdminRoute><AdminFinishes /></AdminRoute></ProtectedRoute>} />
             <Route path="/admin/calibration" element={<ProtectedRoute><AdminRoute><AdminCalibrationViewer /></AdminRoute></ProtectedRoute>} />
-            <Route path="/admin/preview" element={<ProtectedRoute><AdminRoute><div className="max-w-5xl mx-auto"><h1 className="text-2xl font-bold mb-4">材质纹理组合预览</h1><PreviewPanel /></div></AdminRoute></ProtectedRoute>} />
             <Route path="/admin/tickets" element={<ProtectedRoute><AdminRoute><AdminTickets /></AdminRoute></ProtectedRoute>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
