@@ -6,12 +6,19 @@ interface Finish {
   label_zh: string;
   gate_profile: string;
   lighting_profile: string;
+  texture_profile?: string;
+  texture_intensity?: number;
   principled: {
     base_color: number[];
     roughness: number;
     metallic: number;
     coat_weight: number;
   };
+}
+
+interface TextureProfile {
+  id: string;
+  label_zh?: string;
 }
 
 interface CategoryMapping {
@@ -32,14 +39,17 @@ export function AdminFinishes() {
   const [editing, setEditing] = useState<string | null>(null);
   const [pending, setPending] = useState<string>('');
   const [mapMsg, setMapMsg] = useState('');
+  const [textureProfiles, setTextureProfiles] = useState<TextureProfile[]>([]);
 
   useEffect(() => {
     Promise.all([
       axios.get('/api/finishes'),
       axios.get('/api/category-finishes'),
-    ]).then(([fr, mr]) => {
+      axios.get('/api/texture-profiles').catch(() => ({ data: { profiles: [] } })),
+    ]).then(([fr, mr, tr]) => {
       setFinishes(fr.data.finishes || []);
       setMappings(mr.data.mappings || []);
+      setTextureProfiles(tr.data.profiles || []);
     }).finally(() => setLoading(false));
   }, []);
 
@@ -183,6 +193,12 @@ export function AdminFinishes() {
                   <span>金属度 {f.principled.metallic.toFixed(2)}</span>
                   <span>涂层 {f.principled.coat_weight.toFixed(2)}</span>
                 </div>
+                {f.texture_profile && (
+                  <div className="mt-1.5 text-[10px] text-blue-600 truncate">
+                    纹理: {textureProfiles.find(t => t.id === f.texture_profile)?.id || f.texture_profile}
+                    {f.texture_intensity !== undefined && ` ×${f.texture_intensity.toFixed(2)}`}
+                  </div>
+                )}
                 <div className="mt-2">
                   <button onClick={() => handleDelete(f.id)}
                     className="text-xs text-red-500 hover:underline">删除</button>

@@ -247,11 +247,11 @@ export function AdminCalibrationViewer() {
       {tab === 'viewer' && (
         <>
           {/* Load bar */}
-          <div className="flex items-start gap-3 mb-4">
-            <div className="relative">
-              <div className="flex gap-2 items-center">
+          <div className="mb-4">
+            <div className="flex flex-nowrap items-center gap-3">
+              <div className="flex flex-nowrap gap-2 items-center min-w-0">
                 <select value={finishName} onChange={e => setFinishName(e.target.value)}
-                  className="px-3 py-2 border rounded-lg text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
+                  className="px-3 py-2 border rounded-lg text-sm w-64 shrink-0 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
                   <option value="">— 选择材质 —</option>
                   {finishes.map(f => (
                     <option key={f.id} value={f.id}>{f.label_zh} ({f.id})</option>
@@ -259,15 +259,15 @@ export function AdminCalibrationViewer() {
                 </select>
                 <input value={finishName} onChange={e => setFinishName(e.target.value)}
                   placeholder="或直接输入 finish id"
-                  className="px-3 py-2 border rounded-lg text-sm w-40 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                  className="px-3 py-2 border rounded-lg text-sm w-40 shrink-0 focus:outline-none focus:ring-2 focus:ring-blue-300" />
               </div>
+              <button onClick={loadReport} disabled={loading}
+                className="shrink-0 whitespace-nowrap px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                {loading ? '加载中...' : '查看'}
+              </button>
             </div>
-            <button onClick={loadReport} disabled={loading}
-              className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50">
-              {loading ? '加载中...' : '查看'}
-            </button>
             {recent.length > 0 && (
-              <div className="flex items-center gap-1.5 flex-wrap">
+              <div className="flex items-center gap-1.5 flex-wrap mt-2">
                 <span className="text-xs text-gray-400">最近:</span>
                 {recent.map(n => (
                   <button key={n} onClick={() => { setFinishName(n); setTimeout(loadReport, 0); }}
@@ -517,28 +517,30 @@ export function AdminCalibrationViewer() {
 
       {tab === 'category' && (
         <>
-          <div className="flex items-start gap-3 mb-4 flex-wrap">
-            <select value={categoryName} onChange={e => setCategoryName(e.target.value)}
-              className="px-3 py-2 border rounded-lg text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
-              <option value="">— 选择产品类目 —</option>
-              {mappings.map(m => (
-                <option key={m.category_key} value={m.category_key}>{m.category_key}</option>
-              ))}
-            </select>
-            <input value={categoryName} onChange={e => setCategoryName(e.target.value)}
-              placeholder="或直接输入 category key"
-              className="px-3 py-2 border rounded-lg text-sm w-48 focus:outline-none focus:ring-2 focus:ring-blue-300" />
-            <select value={cameraMode} onChange={e => setCameraMode(e.target.value as 'fullshot' | 'detail')}
-              className="px-3 py-2 border rounded-lg text-sm bg-white">
-              <option value="fullshot">fullshot</option>
-              <option value="detail">detail</option>
-            </select>
-            <button onClick={loadCategoryReport} disabled={categoryLoading}
-              className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50">
-              {categoryLoading ? '加载中...' : '查看'}
-            </button>
+          <div className="mb-4">
+            <div className="flex flex-nowrap items-center gap-3">
+              <select value={categoryName} onChange={e => setCategoryName(e.target.value)}
+                className="px-3 py-2 border rounded-lg text-sm w-64 shrink-0 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
+                <option value="">— 选择产品类目 —</option>
+                {mappings.map(m => (
+                  <option key={m.category_key} value={m.category_key}>{m.category_key}</option>
+                ))}
+              </select>
+              <input value={categoryName} onChange={e => setCategoryName(e.target.value)}
+                placeholder="或直接输入 category key"
+                className="px-3 py-2 border rounded-lg text-sm w-48 shrink-0 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+              <select value={cameraMode} onChange={e => setCameraMode(e.target.value as 'fullshot' | 'detail')}
+                className="px-3 py-2 border rounded-lg text-sm shrink-0 bg-white">
+                <option value="fullshot">fullshot</option>
+                <option value="detail">detail</option>
+              </select>
+              <button onClick={loadCategoryReport} disabled={categoryLoading}
+                className="shrink-0 whitespace-nowrap px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                {categoryLoading ? '加载中...' : '查看'}
+              </button>
+            </div>
             {recentCategories.length > 0 && (
-              <div className="flex items-center gap-1.5 flex-wrap">
+              <div className="flex items-center gap-1.5 flex-wrap mt-2">
                 <span className="text-xs text-gray-400">最近:</span>
                 {recentCategories.map(n => (
                   <button key={n} onClick={() => { setCategoryName(n); setTimeout(loadCategoryReport, 0); }}
