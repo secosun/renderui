@@ -209,6 +209,28 @@ export function AdminFinishes() {
         </div>
       )}
 
+      {/* Texture Profiles */}
+      {textureProfiles.length > 0 && (
+        <div className="bg-white rounded-lg shadow border mb-6">
+          <div className="px-4 py-3 border-b bg-gray-50 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-gray-700">纹理库</h2>
+            <span className="text-xs text-gray-400">{textureProfiles.length} 个纹理</span>
+          </div>
+          <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {textureProfiles.map(tp => (
+              <div key={tp.id} className="border rounded-lg p-3 bg-gray-50">
+                <div className="font-medium text-sm">{tp.label_zh || tp.id}</div>
+                <div className="text-xs text-gray-400 font-mono mt-0.5">{tp.id}</div>
+                <div className="mt-2 text-[10px] text-gray-500">
+                  {tp.bakecoat_procedural?.micro && <span>micro {tp.bakecoat_procedural.micro.scale?.toFixed(0)} </span>}
+                  {tp.bakecoat_procedural?.bump && <span>bump ×{tp.bakecoat_procedural.bump.strength?.toFixed(3)}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Category mapping */}
       <div className="bg-white rounded-lg shadow border">
         <div className="px-4 py-3 border-b bg-gray-50 flex items-center justify-between">
