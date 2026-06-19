@@ -74,6 +74,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
                           className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">材质管理</Link>
                         <Link to="/admin/calibration" onClick={() => setMenuOpen(false)}
                           className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">材质校准</Link>
+                        <Link to="/admin/preview" onClick={() => setMenuOpen(false)}
+                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">组合预览</Link>
                         <Link to="/admin/tickets" onClick={() => setMenuOpen(false)}
                           className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">客服工单</Link>
                       </>
