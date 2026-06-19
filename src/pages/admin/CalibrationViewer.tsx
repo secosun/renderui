@@ -437,6 +437,11 @@ export function AdminCalibrationViewer() {
                 )}
               </div>
 
+              {/* Texture profile info & combo preview */}
+              {report.finish_id && (
+                <TexturePreview finishId={report.finish_id} />
+              )}
+
               {/* Confirm stage */}
               {report.confirm_stage?.candidates?.length && (
                 <div className="bg-white rounded-lg shadow p-4">
@@ -731,5 +736,70 @@ function MappingRow({ mapping, finishes, onUpdate }: {
         )}
       </td>
     </tr>
+  );
+}
+
+
+function TexturePreview({ finishId }: { finishId: string }) {
+  const [textures, setTextures] = useState<{ id: string; label_zh?: string }[]>([]);
+  const [selectedTex, setSelectedTex] = useState('');
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [previewKey, setPreviewKey] = useState(0);
+
+  useEffect(() => {
+    axios.get('/api/texture-profiles')
+      .then(r => setTextures(r.data.profiles || []))
+      .catch(() => {});
+  }, []);
+
+  const handlePreview = async () => {
+    if (!selectedTex) return;
+    setLoading(true);
+    setError('');
+    setPreviewUrl('');
+    try {
+      const res = await axios.get('/api/preview/render', {
+        params: { finish_id: finishId, texture_profile_id: selectedTex, samples: 128 },
+      });
+      setPreviewUrl(res.data.image_url);
+      setPreviewKey(k => k + 1);
+    } catch (err: any) {
+      setError(err.response?.data?.detail || err.message || '渲染失败');
+    }
+    setLoading(false);
+  };
+
+  if (textures.length === 0) return null;
+
+  return (
+    <div className="bg-white rounded-lg shadow p-4">
+      <div className="text-xs font-semibold text-gray-500 uppercase mb-3">纹理组合</div>
+      <div className="flex items-end gap-3 mb-3">
+        <div>
+          <label className="text-xs text-gray-400 block mb-1">切换纹理</label>
+          <select value={selectedTex} onChange={e => setSelectedTex(e.target.value)}
+            className="px-3 py-2 border rounded-lg text-sm bg-white w-48">
+            <option value="">— 选择纹理 —</option>
+            {textures.map(t => (
+              <option key={t.id} value={t.id}>{t.label_zh || t.id}</option>
+            ))}
+          </select>
+        </div>
+        <button onClick={handlePreview} disabled={loading || !selectedTex}
+          className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50">
+          {loading ? '渲染中...' : '预览'}
+        </button>
+      </div>
+      {error && <div className="text-xs text-red-600 mb-2">{error}</div>}
+      {previewUrl && (
+        <div>
+          <div className="text-xs text-gray-500 mb-1">{finishId} + {selectedTex}</div>
+          <img key={`texprev-${previewKey}`} src={previewUrl}
+            className="w-48 rounded-lg border shadow-sm bg-white" />
+        </div>
+      )}
+    </div>
   );
 }
