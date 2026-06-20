@@ -5,6 +5,7 @@ import { ParamField } from '../components/ParamField';
 import { ModelViewer } from '../components/ModelViewer';
 import { ColorPicker } from '../components/ColorPicker';
 import { FinishPicker } from '../components/FinishPicker';
+import { ScenePicker } from '../components/ScenePicker';
 import type { CatalogColor, Finish } from '../api/client';
 
 export function TemplateDetail() {
@@ -258,22 +259,20 @@ export function TemplateDetail() {
 
               {/* Scene */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">渲染场景</label>
-                <select value={sceneId} onChange={e => setSceneId(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">
-                  {scenes.length > 0 ? scenes.map((s: any) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  )) : (
-                    <>
-                      <option value="studio_champagne">香槟金 工作室标准</option>
-                      <option value="studio_black_matte">哑光黑 工作室标准</option>
-                      <option value="studio_gunmetal">枪灰色 金属质感</option>
-                      <option value="studio_automotive">汽车烤漆 高光泽</option>
-                      <option value="studio_white_soft">柔光白 简洁风</option>
-                      <option value="studio_orange">橙色粉末涂层</option>
-                    </>
-                  )}
-                </select>
+                <h3 className="text-sm font-medium text-gray-700 mb-2">渲染场景</h3>
+                {scenes.length > 0 ? (
+                  <ScenePicker scenes={scenes} value={sceneId} onChange={setSceneId} />
+                ) : (
+                  <select value={sceneId} onChange={e => setSceneId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+                    <option value="studio_neutral">标准影棚</option>
+                    <option value="studio_high_key">高调影棚</option>
+                    <option value="studio_dark">低调影棚</option>
+                    <option value="studio_soft">柔光影棚</option>
+                    <option value="outdoor_overcast">阴天户外</option>
+                    <option value="outdoor_sunset">日落暖光</option>
+                  </select>
+                )}
               </div>
 
               <div>
