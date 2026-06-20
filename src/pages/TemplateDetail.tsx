@@ -3,6 +3,9 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { ParamField } from '../components/ParamField';
 import { ModelViewer } from '../components/ModelViewer';
+import { ColorPicker } from '../components/ColorPicker';
+import { FinishPicker } from '../components/FinishPicker';
+import type { CatalogColor, Finish } from '../api/client';
 
 export function TemplateDetail() {
   const { slug } = useParams<{ slug: string }>();
@@ -16,9 +19,15 @@ export function TemplateDetail() {
   const [fetching, setFetching] = useState(true);
   const [error, setError] = useState('');
 
+  // Color/finish state
+  const [colorCatalog, setColorCatalog] = useState<Record<string, CatalogColor>>({});
+  const [colorSeries, setColorSeries] = useState<Record<string, string>>({});
+  const [allFinishes, setAllFinishes] = useState<Finish[]>([]);
+  const [selectedColor, setSelectedColor] = useState('');
+  const [selectedFinish, setSelectedFinish] = useState('');
+
   useEffect(() => {
     if (!slug) return;
-    // Load template by slug (list then filter)
     axios.get('/api/freecad/templates?limit=100')
       .then(res => {
         const list = res.data.templates || [];
@@ -42,7 +51,27 @@ export function TemplateDetail() {
     axios.get('/api/scenes')
       .then(res => setScenes(res.data.scenes || res.data || []))
       .catch(() => {});
+
+    // Fetch color catalog + finishes
+    axios.get('/api/colors')
+      .then(res => {
+        setColorCatalog(res.data.colors || {});
+        setColorSeries(res.data.series || {});
+      })
+      .catch(() => {});
+    axios.get('/api/finishes')
+      .then(res => setAllFinishes(res.data.finishes || []))
+      .catch(() => {});
   }, [slug]);
+
+  // Initialize selected color/finish when template data loads
+  useEffect(() => {
+    if (!template) return;
+    const availColors = template.available_colors || Object.keys(colorCatalog);
+    const availFinishes = template.available_finishes || allFinishes.map((f: any) => f.id);
+    if (!selectedColor && availColors.length > 0) setSelectedColor(availColors[0]);
+    if (!selectedFinish && availFinishes.length > 0) setSelectedFinish(availFinishes[0]);
+  }, [template, colorCatalog, allFinishes]);
 
   const handleParamChange = (key: string, value: string) => {
     const param = template?.params_schema?.properties?.[key];
@@ -63,6 +92,8 @@ export function TemplateDetail() {
         scene_id: sceneId || undefined,
         prompt: prompt || undefined,
         name: `${template.name} - ${new Date().toLocaleDateString()}`,
+        catalog_color: selectedColor || undefined,
+        surface_finish: selectedFinish || undefined,
       });
       navigate(`/tasks/${res.data.id}`);
     } catch (err: any) {
@@ -71,6 +102,13 @@ export function TemplateDetail() {
       setLoading(false);
     }
   };
+
+  const availableColorKeys = template?.available_colors?.length
+    ? template.available_colors
+    : Object.keys(colorCatalog);
+  const availableFinishIds = template?.available_finishes?.length
+    ? template.available_finishes
+    : allFinishes.map(f => f.id);
 
   if (fetching) {
     return (
@@ -92,7 +130,6 @@ export function TemplateDetail() {
   const hasParams = template.params_schema?.properties &&
     Object.keys(template.params_schema.properties).length > 0;
 
-  // Determine preview 3D model from template type
   const previewUrl = (() => {
     const props = template.params_schema?.properties || {};
     if (props.diameter) return '/uploads/preview_cylinder.obj';
@@ -100,7 +137,6 @@ export function TemplateDetail() {
     return null;
   })();
 
-  // Compute 3D scale from current parameter values
   const previewScale: [number, number, number] = (() => {
     const props = template.params_schema?.properties || {};
     const defs: Record<string, number> = {};
@@ -151,7 +187,6 @@ export function TemplateDetail() {
             </div>
           </div>
 
-          {/* Model Info */}
           <div className="bg-white rounded-lg shadow p-4 mt-4">
             <div className="flex items-center gap-2 mb-2">
               <h1 className="text-xl font-bold text-gray-900">{template.name}</h1>
@@ -194,6 +229,34 @@ export function TemplateDetail() {
                 </div>
               )}
 
+              {/* Surface Finish */}
+              {allFinishes.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-700 mb-2">表面处理</h3>
+                  <FinishPicker
+                    finishes={allFinishes}
+                    availableIds={availableFinishIds}
+                    value={selectedFinish}
+                    onChange={setSelectedFinish}
+                  />
+                </div>
+              )}
+
+              {/* Color */}
+              {Object.keys(colorCatalog).length > 0 && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-700 mb-2">颜色</h3>
+                  <ColorPicker
+                    colors={colorCatalog}
+                    series={colorSeries}
+                    availableKeys={availableColorKeys}
+                    value={selectedColor}
+                    onChange={setSelectedColor}
+                  />
+                </div>
+              )}
+
+              {/* Scene */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">渲染场景</label>
                 <select value={sceneId} onChange={e => setSceneId(e.target.value)}
