@@ -359,6 +359,57 @@ export async function deleteAsset(assetId: string) {
   await api.delete(`/assets/${assetId}`);
 }
 
+// ── Colors API (RAL + legacy) ─────────────────────────────────────────
+
+export interface CatalogColor {
+  key: string;
+  label_zh: string;
+  label_en: string;
+  hex: string;
+  linear_rgba: number[];
+  series: string;
+}
+
+export interface ColorListResponse {
+  colors: Record<string, CatalogColor>;
+  series: Record<string, string>;
+}
+
+export async function listColors() {
+  const { data } = await api.get('/colors');
+  return data as ColorListResponse;
+}
+
+// ── Finishes API ─────────────────────────────────────────────────────
+
+export interface FinishPrincipled {
+  base_color: number[];
+  roughness: number;
+  metallic: number;
+  specular_ior_level: number;
+  coat_weight: number;
+  coat_roughness: number;
+  coat_ior: number;
+}
+
+export interface Finish {
+  id: string;
+  label_zh: string;
+  gate_profile: string;
+  lighting_profile: string;
+  view_exposure: number;
+  hdri_strength: number;
+  world_strength: number;
+  principled: FinishPrincipled;
+  texture_profile?: string;
+  texture_intensity?: number;
+}
+
+export async function listFinishes() {
+  const { data } = await api.get('/finishes');
+  return data as { finishes: Finish[]; total: number };
+}
+
 // ── Scenes API (user-managed) ────────────────────────────────────────
 
 export interface SceneDetail {

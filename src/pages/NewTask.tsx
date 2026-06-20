@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { ParamField } from '../components/ParamField';
+import { ColorPicker } from '../components/ColorPicker';
+import { FinishPicker } from '../components/FinishPicker';
+import type { CatalogColor, Finish } from '../api/client';
 
 export function NewTask() {
   const navigate = useNavigate();
@@ -19,13 +22,19 @@ export function NewTask() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('');
 
+  // Color/finish state
+  const [colorCatalog, setColorCatalog] = useState<Record<string, CatalogColor>>({});
+  const [colorSeries, setColorSeries] = useState<Record<string, string>>({});
+  const [allFinishes, setAllFinishes] = useState<Finish[]>([]);
+  const [selectedColor, setSelectedColor] = useState('');
+  const [selectedFinish, setSelectedFinish] = useState('');
+
   // Fetch templates and scenes
   useEffect(() => {
     axios.get('/api/freecad/templates?limit=50')
       .then(res => {
         const list = res.data.templates || [];
         setTemplates(list);
-        // Auto-select preselected template
         if (preselectedId) {
           const found = list.find((t: any) => t.id === preselectedId);
           if (found) selectTemplate(found);
@@ -34,6 +43,17 @@ export function NewTask() {
       .catch(() => {});
     axios.get('/api/scenes')
       .then(res => setScenes(res.data.scenes || res.data || []))
+      .catch(() => {});
+
+    // Fetch color catalog and finishes
+    axios.get('/api/colors')
+      .then(res => {
+        setColorCatalog(res.data.colors || {});
+        setColorSeries(res.data.series || {});
+      })
+      .catch(() => {});
+    axios.get('/api/finishes')
+      .then(res => setAllFinishes(res.data.finishes || []))
       .catch(() => {});
   }, [preselectedId]);
 
@@ -67,6 +87,12 @@ export function NewTask() {
     setParamValues(defaults);
     setSceneId(defaultSceneId);
     setError('');
+
+    // Init color/finish — use template bindings if set, otherwise fallback to catalog defaults
+    const availColors = template.available_colors || Object.keys(colorCatalog);
+    const availFinishes = template.available_finishes || allFinishes.map((f: any) => f.id);
+    setSelectedColor(availColors[0] || '');
+    setSelectedFinish(availFinishes[0] || '');
   };
 
   const handleParamChange = (key: string, value: string) => {
@@ -88,6 +114,8 @@ export function NewTask() {
         scene_id: sceneId || defaultSceneId || undefined,
         prompt: prompt || undefined,
         name: `${selectedTemplate.name} - ${new Date().toLocaleDateString()}`,
+        catalog_color: selectedColor || undefined,
+        surface_finish: selectedFinish || undefined,
       });
       navigate(`/tasks/${res.data.id}`);
     } catch (err: any) {
@@ -96,6 +124,14 @@ export function NewTask() {
       setLoading(false);
     }
   };
+
+  // Determine which colors/finishes are available for this template
+  const availableColorKeys = selectedTemplate?.available_colors?.length
+    ? selectedTemplate.available_colors
+    : Object.keys(colorCatalog);
+  const availableFinishIds = selectedTemplate?.available_finishes?.length
+    ? selectedTemplate.available_finishes
+    : allFinishes.map(f => f.id);
 
   return (
     <div className="flex gap-6">
@@ -177,7 +213,7 @@ export function NewTask() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Parameters */}
+              {/* Dimensions */}
               {selectedTemplate.params_schema?.properties &&
                 Object.keys(selectedTemplate.params_schema.properties).length > 0 && (
                 <div>
@@ -194,6 +230,33 @@ export function NewTask() {
                       />
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Surface Finish */}
+              {allFinishes.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-700 mb-2">表面处理</h3>
+                  <FinishPicker
+                    finishes={allFinishes}
+                    availableIds={availableFinishIds}
+                    value={selectedFinish}
+                    onChange={setSelectedFinish}
+                  />
+                </div>
+              )}
+
+              {/* Color */}
+              {Object.keys(colorCatalog).length > 0 && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-700 mb-2">颜色</h3>
+                  <ColorPicker
+                    colors={colorCatalog}
+                    series={colorSeries}
+                    availableKeys={availableColorKeys}
+                    value={selectedColor}
+                    onChange={setSelectedColor}
+                  />
                 </div>
               )}
 

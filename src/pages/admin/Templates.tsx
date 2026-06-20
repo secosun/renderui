@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
+import type { CatalogColor, Finish } from '../../api/client';
 
 export function AdminTemplates() {
   const [templates, setTemplates] = useState<any[]>([]);
@@ -23,8 +24,23 @@ export function AdminTemplates() {
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
   const [editCategory, setEditCategory] = useState('');
+  // Color/finish binding state
+  const [allFinishes, setAllFinishes] = useState<Finish[]>([]);
+  const [colorCatalog, setColorCatalog] = useState<Record<string, CatalogColor>>({});
+  const [colorSeries, setColorSeries] = useState<Record<string, string>>({});
+  const [selectedFinishes, setSelectedFinishes] = useState<string[]>([]);
+  const [selectedColors, setSelectedColors] = useState<string[]>([]);
+  // Binding search
+  const [colorSearch, setColorSearch] = useState('');
 
-  useEffect(() => { loadTemplates(); }, []);
+  useEffect(() => {
+    loadTemplates();
+    axios.get('/api/colors').then(r => {
+      setColorCatalog(r.data.colors || {});
+      setColorSeries(r.data.series || {});
+    }).catch(() => {});
+    axios.get('/api/finishes').then(r => setAllFinishes(r.data.finishes || [])).catch(() => {});
+  }, []);
 
   const loadTemplates = async () => {
     try {
@@ -48,6 +64,8 @@ export function AdminTemplates() {
         name, slug, description, category,
         tags: tags.split(',').map(t => t.trim()).filter(Boolean),
         params_schema: paramsSchema,
+        available_finishes: selectedFinishes,
+        available_colors: selectedColors,
       });
       const templateId = res.data.id;
       if (file) {
@@ -69,6 +87,8 @@ export function AdminTemplates() {
     setName(''); setSlug(''); setDescription('');
     setCategory('aluminum'); setTags(''); setFile(null);
     setParamDefs('{}');
+    setSelectedFinishes([]);
+    setSelectedColors([]);
   };
 
   const deleteTemplate = async (id: string) => {
@@ -95,12 +115,17 @@ export function AdminTemplates() {
     setEditName(t.name);
     setEditDesc(t.description);
     setEditCategory(t.category);
+    setSelectedFinishes(t.available_finishes || []);
+    setSelectedColors(t.available_colors || []);
+    setColorSearch('');
   };
 
   const saveEdit = async (id: string) => {
     try {
       await axios.patch(`/api/freecad/templates/${id}`, {
         name: editName, description: editDesc, category: editCategory,
+        available_finishes: selectedFinishes,
+        available_colors: selectedColors,
       });
       setEditingId(null);
       loadTemplates();
@@ -182,6 +207,72 @@ export function AdminTemplates() {
             </div>
           </div>
 
+          {/* Surface finish binding */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">可用表面处理</label>
+            {allFinishes.length === 0 ? (
+              <div className="text-xs text-gray-400">加载中...</div>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {allFinishes.map(f => {
+                  const active = selectedFinishes.includes(f.id);
+                  return (
+                    <button key={f.id} type="button" onClick={() => {
+                      setSelectedFinishes(prev =>
+                        active ? prev.filter(x => x !== f.id) : [...prev, f.id]
+                      );
+                    }} className={`text-xs px-2.5 py-1 rounded-full border transition-all ${
+                      active
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                    }`}>{f.label_zh}</button>
+                  );
+                })}
+              </div>
+            )}
+            {selectedFinishes.length === 0 && (
+              <p className="text-[10px] text-gray-400 mt-1">未选择（渲染将使用默认表面处理）</p>
+            )}
+          </div>
+
+          {/* Color binding */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">可用颜色</label>
+            <input value={colorSearch} onChange={e => setColorSearch(e.target.value)}
+              placeholder="搜索色号..."
+              className="mb-2 w-full px-3 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 outline-none" />
+            {Object.keys(colorCatalog).length === 0 ? (
+              <div className="text-xs text-gray-400">加载中...</div>
+            ) : (
+              <div className="max-h-40 overflow-y-auto grid grid-cols-3 sm:grid-cols-4 gap-1">
+                {Object.entries(colorCatalog).filter(([k, c]) => {
+                  if (!colorSearch) return true;
+                  const q = colorSearch.toLowerCase();
+                  return k.includes(q) || c.label_zh.includes(q) || c.label_en.toLowerCase().includes(q);
+                }).map(([key, c]) => {
+                  const active = selectedColors.includes(key);
+                  return (
+                    <button key={key} type="button" onClick={() => {
+                      setSelectedColors(prev =>
+                        active ? prev.filter(x => x !== key) : [...prev, key]
+                      );
+                    }} className={`flex items-center gap-1.5 p-1 rounded text-[10px] border transition-all ${
+                      active
+                        ? 'bg-blue-50 border-blue-400 ring-1 ring-blue-300'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}>
+                      <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: c.hex }} />
+                      <span className="truncate">{c.label_en || key}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {selectedColors.length > 0 && (
+              <p className="text-[10px] text-gray-400 mt-1">已选 {selectedColors.length} 色</p>
+            )}
+          </div>
+
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="block text-sm font-medium text-gray-700">参数定义 (JSON)</label>
@@ -219,6 +310,7 @@ export function AdminTemplates() {
                 <th className="text-left px-4 py-3 font-medium">名称</th>
                 <th className="text-left px-4 py-3 font-medium">分类</th>
                 <th className="text-left px-4 py-3 font-medium">参数</th>
+                <th className="text-left px-4 py-3 font-medium">绑定</th>
                 <th className="text-left px-4 py-3 font-medium">创建时间</th>
                 <th className="px-4 py-3"></th>
               </tr>
@@ -262,6 +354,16 @@ export function AdminTemplates() {
                   <td className="px-4 py-3 text-gray-600 text-xs">{t.category}</td>
                   <td className="px-4 py-3 text-gray-500 text-xs font-mono max-w-[200px] truncate">
                     {t.params_schema?.properties ? Object.keys(t.params_schema.properties).join(', ') : '-'}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col gap-0.5 text-[10px]">
+                      <span className={t.available_finishes?.length > 0 ? 'text-blue-600' : 'text-gray-400'}>
+                        表面: {t.available_finishes?.length || 0}
+                      </span>
+                      <span className={t.available_colors?.length > 0 ? 'text-purple-600' : 'text-gray-400'}>
+                        颜色: {t.available_colors?.length || 0}
+                      </span>
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-gray-400 text-xs">{new Date(t.created_at).toLocaleDateString()}</td>
                   <td className="px-4 py-3">
