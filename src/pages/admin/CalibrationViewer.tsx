@@ -14,8 +14,11 @@ interface PhaseBest {
   micro_detail?: number;
   fine_scale?: number;
   rough_mix?: number;
+  mapping_scale_x?: number;
   score?: number;
   phase?: string;
+  best_trial?: number;
+  tag?: string;
 }
 
 interface CalibrationReport {
@@ -32,12 +35,16 @@ interface CalibrationReport {
   trial_scores?: number[];
   calibration_phases?: {
     mode?: string;
+    brush_mode?: string;
+    texture_skipped?: boolean;
+    texture_skip_reason?: string;
     pbr?: PhaseBest;
     texture?: PhaseBest;
   };
   confirm_stage?: {
     top_k: number;
     samples: number;
+    best_source_trial?: number;
     candidates: { source_trial: number; search_score: number; confirm_score: number; path?: string }[];
   };
   validation?: {
@@ -705,12 +712,74 @@ function reviewFilename(base: string): string {
   return `${base.slice(0, i)}_review${base.slice(i)}`;
 }
 
+function parseTrialParams(trialId: string): [string, string][] {
+  const m = trialId.match(/^\w+_\d+_(.+)$/);
+  if (!m) return [];
+  const suffix = m[1];
+  const parts = suffix.split('_');
+  const result: [string, string][] = [];
+  const labelMap: Record<string, string> = {
+    r: 'roughness', m: 'metallic', s: 'specular',
+    a: 'aniso', cw: 'coat', cr: 'coat_r',
+    bm: 'bump', rm: 'rough_mix', sx: 'scale_x',
+    rw: 'ramp_w', av: 'aniso_v',
+  };
+  for (const p of parts) {
+    const kv = p.match(/^([a-z]+)([\d.]+)$/);
+    if (kv) {
+      const key = labelMap[kv[1]] || kv[1];
+      result.push([key, kv[2]]);
+    }
+  }
+  return result;
+}
+
 function inferTrialPhase(img: TrialImage): string {
   if (img.phase) return img.phase;
   if (img.filename.startsWith('pbr/') || img.trial_id.startsWith('pbr_')) return 'pbr';
   if (img.filename.startsWith('texture/') || img.trial_id.startsWith('tex_')) return 'texture';
   if (img.trial_id.startsWith('confirm_t')) return 'confirm';
   return 'legacy';
+}
+
+function phaseBestTrialPrefix(
+  phase: 'pbr' | 'texture',
+  images: TrialImage[],
+  phaseBest?: PhaseBest,
+): string | null {
+  if (phaseBest?.best_trial !== undefined) {
+    const prefix = `${phase === 'pbr' ? 'pbr' : 'tex'}_${String(phaseBest.best_trial).padStart(3, '0')}`;
+    if (images.some(i => i.trial_id.startsWith(prefix))) return prefix;
+  }
+  if (phase === 'pbr' && phaseBest?.roughness !== undefined) {
+    let best: TrialImage | null = null;
+    let bestDiff = Infinity;
+    for (const img of images) {
+      const m = img.trial_id.match(/^(pbr_\d+)_r([\d.]+)/);
+      if (!m) continue;
+      const diff = Math.abs(parseFloat(m[2]) - phaseBest.roughness);
+      if (diff < bestDiff) { bestDiff = diff; best = img; }
+    }
+    if (best && bestDiff < 0.01) {
+      const m = best.trial_id.match(/^(pbr_\d+)/);
+      return m ? m[1] : null;
+    }
+  }
+  if (phase === 'texture' && phaseBest?.bump_mult !== undefined) {
+    let best: TrialImage | null = null;
+    let bestDiff = Infinity;
+    for (const img of images) {
+      const m = img.trial_id.match(/^(tex_\d+)_bm([\d.]+)/);
+      if (!m) continue;
+      const diff = Math.abs(parseFloat(m[2]) - phaseBest.bump_mult);
+      if (diff < bestDiff) { bestDiff = diff; best = img; }
+    }
+    if (best && bestDiff < 0.05) {
+      const m = best.trial_id.match(/^(tex_\d+)/);
+      return m ? m[1] : null;
+    }
+  }
+  return null;
 }
 
 function splitTrialImages(images: TrialImage[]) {
@@ -852,20 +921,43 @@ function TrialGallerySection({
         />
       )}
 
-      {selectedImage && images.some(i => i.filename === selectedImage) && (
-        <div className="mb-4">
-          <img
-            key={`sel-${loadKey}-${selectedImage}`}
-            src={calImageUrl(finishId, selectedImage, true)}
-            alt={selectedImage}
-            className="w-full max-w-lg mx-auto rounded-lg border shadow-lg bg-gray-50"
-            onError={(e) => {
-              (e.target as HTMLImageElement).src = calImageUrl(finishId, selectedImage, false);
-            }}
-          />
-          <div className="text-center text-xs text-gray-400 mt-2">{selectedImage}</div>
-        </div>
-      )}
+      {(() => {
+        const sel = selectedImage && images.find(i => i.filename === selectedImage);
+        if (!sel) return null;
+        const params = parseTrialParams(sel.trial_id);
+        return (
+          <div className="mb-4 flex gap-4 items-start">
+            <div className="shrink-0 w-full max-w-lg">
+              <img
+                key={`sel-${loadKey}-${selectedImage}`}
+                src={calImageUrl(finishId, selectedImage, true)}
+                alt={selectedImage}
+                className="w-full rounded-lg border shadow-lg bg-gray-50"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = calImageUrl(finishId, selectedImage, false);
+                }}
+              />
+            </div>
+            {params.length > 0 && (
+              <div className="text-xs font-mono bg-gray-50 rounded-lg border p-3 min-w-32 whitespace-nowrap">
+                <div className="text-gray-500 uppercase font-semibold mb-1.5 not-mono">参数</div>
+                {params.map(([k, v]) => (
+                  <div key={k} className="flex justify-between gap-4 py-0.5">
+                    <span className="text-gray-400">{k}</span>
+                    <span className="text-gray-700 font-medium">{v}</span>
+                  </div>
+                ))}
+                {sel.score !== null && sel.score !== undefined && (
+                  <div className="flex justify-between gap-4 py-0.5 border-t border-gray-200 mt-1.5 pt-1.5">
+                    <span className="text-gray-400">score</span>
+                    <span className="text-blue-600 font-semibold">{sel.score.toFixed(4)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {images.length > 0 ? (
         <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
@@ -918,23 +1010,47 @@ function PhaseCalibrationReview({
         (a.confirm_score || 0) >= (b.confirm_score || 0) ? a : b
       )
     : null;
-  const bestConfirmId = bestConfirm
-    ? `confirm_t${String(bestConfirm.source_trial).padStart(3, '0')}`
+  const confirmTrial = report.confirm_stage?.best_source_trial ?? bestConfirm?.source_trial;
+  const bestConfirmId = confirmTrial !== undefined
+    ? `confirm_t${String(confirmTrial).padStart(3, '0')}`
     : null;
+  const bestPbrId = phaseBestTrialPrefix('pbr', pbr, report.calibration_phases?.pbr);
+  const bestTexId = phaseBestTrialPrefix('texture', texture, report.calibration_phases?.texture);
+
+  const brushMode = report.calibration_phases?.brush_mode || '';
+  const isWaveBrush = brushMode === 'wave';
+  const textureSkipped = Boolean(report.calibration_phases?.texture_skipped);
+  const phase2Title = isWaveBrush ? '程序化拉丝' : '纹理细节';
+  const texKeys: { key: keyof PhaseBest; fmt?: (v: number) => string }[] = isWaveBrush
+    ? [
+        { key: 'bump_mult', fmt: v => `×${v.toFixed(2)}` },
+        { key: 'mapping_scale_x', fmt: v => v.toFixed(0) },
+      ]
+    : [
+        { key: 'bump_mult', fmt: v => `×${v.toFixed(2)}` },
+        { key: 'micro_scale', fmt: v => v.toFixed(0) },
+        { key: 'fine_scale', fmt: v => v.toFixed(0) },
+        { key: 'rough_mix' },
+      ];
+  const textureEmptyHint = textureSkipped
+    ? (report.calibration_phases?.texture_skip_reason === 'skip_texture'
+      ? 'Phase 2 已跳过（使用了 --skip-texture）；请重跑校准以生成拉丝 trial 图'
+      : 'Phase 2 已跳过（无 bakecoat 或已绑定 texture_profile）')
+    : (isWaveBrush
+      ? '无拉丝 trial 图（texture/ 目录为空或未挂载 calibrate_out）'
+      : '无纹理 trial 图（可能使用了 --skip-texture）');
 
   const pbrKeys: { key: keyof PhaseBest; fmt?: (v: number) => string }[] = [
     { key: 'roughness' }, { key: 'metallic' }, { key: 'specular' },
     { key: 'anisotropic' }, { key: 'coat_weight' },
   ];
-  const texKeys: { key: keyof PhaseBest; fmt?: (v: number) => string }[] = [
-    { key: 'bump_mult', fmt: v => `×${v.toFixed(2)}` },
-    { key: 'micro_scale', fmt: v => v.toFixed(0) },
-    { key: 'fine_scale', fmt: v => v.toFixed(0) },
-    { key: 'rough_mix' },
-  ];
+  const lockedPbrKeys = brushMode
+    ? pbrKeys.filter(k => k.key !== 'anisotropic')
+    : pbrKeys;
 
   const pickable = selectedImage && (
     selectedImage.includes('trial_') || selectedImage.includes('pbr_')
+    || selectedImage.includes('tex_') || selectedImage.includes('confirm_')
   );
 
   return (
@@ -956,12 +1072,13 @@ function PhaseCalibrationReview({
               <PhaseParamsBar label="Phase 1 最优" params={report.calibration_phases?.pbr} keys={pbrKeys} />
             }
             emptyHint="无 PBR trial 图（可能为旧版平铺目录或未挂载 calibrate_out）"
+            highlightTrialId={bestPbrId}
           />
 
           <TrialGallerySection
             finishId={finishId}
             step={2}
-            title="纹理细节"
+            title={phase2Title}
             images={texture}
             gridPhase="texture"
             loadKey={loadKey}
@@ -969,11 +1086,12 @@ function PhaseCalibrationReview({
             onSelectImage={onSelectImage}
             lockedParams={
               <>
-                <PhaseParamsBar label="锁定 PBR" params={report.calibration_phases?.pbr} keys={pbrKeys} />
-                <PhaseParamsBar label="Phase 2 最优" params={report.calibration_phases?.texture} keys={texKeys} />
+                <PhaseParamsBar label="锁定 PBR" params={report.calibration_phases?.pbr} keys={lockedPbrKeys} />
+                <PhaseParamsBar label={isWaveBrush ? 'Phase 2 拉丝最优' : 'Phase 2 最优'} params={report.calibration_phases?.texture} keys={texKeys} />
               </>
             }
-            emptyHint="无纹理 trial 图（可能使用了 --skip-texture）"
+            emptyHint={textureEmptyHint}
+            highlightTrialId={bestTexId}
           />
 
           <TrialGallerySection
