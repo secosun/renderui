@@ -34,6 +34,7 @@ export function FinishPicker({ finishes, availableIds, value, onChange }: Finish
         const selected = value === f.id;
         return (
           <button
+            type="button"
             key={f.id}
             onClick={() => onChange(f.id)}
             className={`

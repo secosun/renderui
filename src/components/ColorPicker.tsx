@@ -60,11 +60,13 @@ export function ColorPicker({ colors, series, availableKeys, value, onChange }: 
       {!search && (
         <div className="flex flex-wrap gap-1">
           <button
+            type="button"
             onClick={() => setActiveSeries('')}
             className={`text-[10px] px-2 py-0.5 rounded-full ${!activeSeries ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
           >全部</button>
           {SERIES_ORDER.filter(s => grouped[s]?.length).map(s => (
             <button
+              type="button"
               key={s}
               onClick={() => setActiveSeries(s)}
               className={`text-[10px] px-2 py-0.5 rounded-full ${activeSeries === s ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
@@ -85,6 +87,7 @@ export function ColorPicker({ colors, series, availableKeys, value, onChange }: 
                 const selected = value === c.key;
                 return (
                   <button
+                    type="button"
                     key={c.key}
                     onClick={() => onChange(c.key)}
                     className={`
