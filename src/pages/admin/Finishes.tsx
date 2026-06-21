@@ -20,6 +20,11 @@ interface Finish {
 interface TextureProfile {
   id: string;
   label_zh?: string;
+  preview_url?: string;
+  bakecoat_procedural?: {
+    micro?: { scale?: number };
+    bump?: { strength?: number };
+  };
 }
 
 interface CategoryMapping {
@@ -219,12 +224,23 @@ export function AdminFinishes() {
           </div>
           <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {textureProfiles.map(tp => (
-              <div key={tp.id} className="border rounded-lg p-3 bg-gray-50">
-                <div className="font-medium text-sm">{tp.label_zh || tp.id}</div>
-                <div className="text-xs text-gray-400 font-mono mt-0.5">{tp.id}</div>
-                <div className="mt-2 text-[10px] text-gray-500">
-                  {tp.bakecoat_procedural?.micro && <span>micro {tp.bakecoat_procedural.micro.scale?.toFixed(0)} </span>}
-                  {tp.bakecoat_procedural?.bump && <span>bump ×{tp.bakecoat_procedural.bump.strength?.toFixed(3)}</span>}
+              <div key={tp.id} className="border rounded-lg overflow-hidden bg-white shadow-sm">
+                {tp.preview_url ? (
+                  <div className="aspect-[4/3] bg-gray-100">
+                    <img src={tp.preview_url} alt={tp.label_zh || tp.id}
+                      className="w-full h-full object-cover" />
+                  </div>
+                ) : (
+                  <div className="aspect-[4/3] bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
+                    <span className="text-2xl font-bold text-gray-300">{(tp.label_zh || tp.id).charAt(0)}</span>
+                  </div>
+                )}
+                <div className="p-2.5">
+                  <div className="font-medium text-sm text-gray-900">{tp.label_zh || tp.id}</div>
+                  <div className="text-xs text-gray-400 font-mono mt-0.5">{tp.id}</div>
+                  <div className="mt-1.5 text-[10px] text-gray-500">
+                    {tp.bakecoat_procedural?.bump && <span>bump ×{tp.bakecoat_procedural.bump.strength?.toFixed(3)}</span>}
+                  </div>
                 </div>
               </div>
             ))}
