@@ -10,19 +10,19 @@ export default defineConfig({
     allowedHosts: ['cadrender.installall.cn'],
     proxy: {
       '/api': {
-        target: process.env.VITE_API_TARGET || 'http://localhost:8060',
+        target: process.env.VITE_API_TARGET || 'http://localhost:8062',
         changeOrigin: true,
       },
       '/uploads': {
-        target: process.env.VITE_API_TARGET || 'http://localhost:8060',
+        target: process.env.VITE_API_TARGET || 'http://localhost:8062',
         changeOrigin: true,
       },
       '/outputs': {
-        target: process.env.VITE_API_TARGET || 'http://localhost:8060',
+        target: process.env.VITE_API_TARGET || 'http://localhost:8062',
         changeOrigin: true,
       },
       '/ws': {
-        target: (process.env.VITE_API_TARGET || 'http://localhost:8060').replace('http', 'ws'),
+        target: (process.env.VITE_API_TARGET || 'http://localhost:8062').replace('http', 'ws'),
         ws: true,
       },
     },
