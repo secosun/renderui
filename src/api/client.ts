@@ -403,6 +403,8 @@ export interface Finish {
   principled: FinishPrincipled;
   texture_profile?: string;
   texture_intensity?: number;
+  preview_url?: string;
+  preview_priority?: string;
 }
 
 export async function listFinishes() {

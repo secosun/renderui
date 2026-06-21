@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { Finish } from '../api/client';
 
 interface FinishPickerProps {
@@ -19,6 +20,8 @@ function rgbaToHex(rgba: number[]): string {
 }
 
 export function FinishPicker({ finishes, availableIds, value, onChange }: FinishPickerProps) {
+  const [imgErrors, setImgErrors] = useState<Set<string>>(new Set());
+
   const list = availableIds
     ? finishes.filter(f => availableIds.includes(f.id))
     : finishes;
@@ -32,31 +35,39 @@ export function FinishPicker({ finishes, availableIds, value, onChange }: Finish
       {list.map(f => {
         const hex = rgbaToHex(f.principled?.base_color || [0.5, 0.5, 0.5, 1.0]);
         const selected = value === f.id;
+        const useImage = f.preview_url && f.preview_priority === 'image' && !imgErrors.has(f.id);
+
         return (
           <button
             type="button"
             key={f.id}
             onClick={() => onChange(f.id)}
             className={`
-              relative overflow-hidden rounded-lg border p-3 text-left transition-all
+              relative overflow-hidden rounded-lg border text-left transition-all
               ${selected ? 'ring-2 ring-blue-500 border-blue-400' : 'border-gray-200 hover:border-gray-300'}
             `}
           >
-            {/* Color background */}
-            <div
-              className="absolute inset-0 opacity-15"
-              style={{ backgroundColor: hex }}
-            />
-            {/* Content */}
-            <div className="relative flex items-center gap-2">
-              <span
-                className="inline-block w-6 h-6 rounded-md border border-gray-200 flex-shrink-0 shadow-sm"
+            {/* Preview image or color background */}
+            {useImage ? (
+              <div className="aspect-[4/3] bg-gray-100">
+                <img
+                  src={f.preview_url}
+                  alt={f.label_zh}
+                  className="w-full h-full object-cover"
+                  onError={() => setImgErrors(prev => new Set(prev).add(f.id))}
+                />
+              </div>
+            ) : (
+              <div
+                className="aspect-[4/3] opacity-20"
                 style={{ backgroundColor: hex }}
               />
-              <div>
-                <div className="text-xs font-medium text-gray-800">{f.label_zh}</div>
-                <div className="text-[10px] text-gray-400">{f.id}</div>
-              </div>
+            )}
+
+            {/* Label overlay */}
+            <div className="p-2.5">
+              <div className="text-xs font-medium text-gray-800">{f.label_zh}</div>
+              <div className="text-[10px] text-gray-400">{f.id}</div>
             </div>
           </button>
         );
