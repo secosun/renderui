@@ -8,6 +8,7 @@ interface Finish {
   lighting_profile: string;
   texture_profile?: string;
   texture_intensity?: number;
+  deprecated?: boolean;
   principled: {
     base_color: number[];
     roughness: number;
@@ -47,7 +48,7 @@ export function AdminFinishes() {
       axios.get('/api/category-finishes'),
       axios.get('/api/texture-profiles').catch(() => ({ data: { profiles: [] } })),
     ]).then(([fr, mr, tr]) => {
-      setFinishes(fr.data.finishes || []);
+      setFinishes((fr.data.finishes || []).filter((f: any) => !f.deprecated));
       setMappings(mr.data.mappings || []);
       setTextureProfiles(tr.data.profiles || []);
     }).finally(() => setLoading(false));
@@ -56,7 +57,7 @@ export function AdminFinishes() {
   const load = async () => {
     try {
       const res = await axios.get('/api/finishes');
-      setFinishes(res.data.finishes || []);
+      setFinishes((res.data.finishes || []).filter((f: any) => !f.deprecated));
     } catch { /* ignore */ }
     setLoading(false);
   };
