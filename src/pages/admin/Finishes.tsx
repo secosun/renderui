@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import axios from 'axios';
 
 interface Finish {
@@ -46,16 +47,19 @@ export function AdminFinishes() {
   const [pending, setPending] = useState<string>('');
   const [mapMsg, setMapMsg] = useState('');
   const [textureProfiles, setTextureProfiles] = useState<TextureProfile[]>([]);
+  const [textureReviewIds, setTextureReviewIds] = useState<string[]>([]);
 
   useEffect(() => {
     Promise.all([
       axios.get('/api/finishes'),
       axios.get('/api/category-finishes'),
       axios.get('/api/texture-profiles').catch(() => ({ data: { profiles: [] } })),
-    ]).then(([fr, mr, tr]) => {
+      axios.get('/api/calibration-reports/texture/index').catch(() => ({ data: { finish_ids: [] } })),
+    ]).then(([fr, mr, tr, tx]) => {
       setFinishes((fr.data.finishes || []).filter((f: any) => !f.deprecated));
       setMappings(mr.data.mappings || []);
       setTextureProfiles(tr.data.profiles || []);
+      setTextureReviewIds(tx.data.finish_ids || []);
     }).finally(() => setLoading(false));
   }, []);
 
@@ -205,6 +209,14 @@ export function AdminFinishes() {
                     {f.texture_intensity !== undefined && ` ×${f.texture_intensity.toFixed(2)}`}
                   </div>
                 )}
+                {textureReviewIds.includes(f.id) && (
+                  <div className="mt-2">
+                    <Link to={`/admin/calibration?tab=texture&finish=${f.id}`}
+                      className="text-xs text-blue-600 hover:underline">
+                      查看纹理校准对比
+                    </Link>
+                  </div>
+                )}
                 <div className="mt-2">
                   <button onClick={() => handleDelete(f.id)}
                     className="text-xs text-red-500 hover:underline">删除</button>
@@ -225,7 +237,25 @@ export function AdminFinishes() {
           <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {textureProfiles.map(tp => (
               <div key={tp.id} className="border rounded-lg overflow-hidden bg-white shadow-sm">
-                {tp.preview_url ? (
+                {textureReviewIds.includes(tp.id) ? (
+                  <Link to={`/admin/calibration?tab=texture&finish=${tp.id}`} className="block">
+                    <div className="aspect-[4/3] bg-gray-900 relative">
+                      <img
+                        src={`/api/calibration-reports/texture/${tp.id}/images/compare_beauty_ref.png`}
+                        alt={`${tp.label_zh || tp.id} 校准对比`}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          const el = e.target as HTMLImageElement;
+                          if (tp.preview_url) el.src = tp.preview_url;
+                          else el.style.display = 'none';
+                        }}
+                      />
+                      <span className="absolute bottom-1 left-1 text-[9px] bg-black/60 text-white px-1 rounded">
+                        校准对比
+                      </span>
+                    </div>
+                  </Link>
+                ) : tp.preview_url ? (
                   <div className="aspect-[4/3] bg-gray-100">
                     <img src={tp.preview_url} alt={tp.label_zh || tp.id}
                       className="w-full h-full object-cover" />

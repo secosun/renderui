@@ -38,6 +38,7 @@ interface CalibrationReport {
     brush_mode?: string;
     texture_skipped?: boolean;
     texture_skip_reason?: string;
+    texture_delegated_finish_id?: string;
     pbr?: PhaseBest;
     texture?: PhaseBest;
   };
@@ -67,6 +68,7 @@ interface TrialImage {
   trial_id: string;
   score: number | null;
   phase?: string;
+  is_best?: boolean;
 }
 
 interface Mapping {
@@ -84,6 +86,28 @@ interface CategoryCandidate {
   params: Record<string, number>;
   image: string;
   dims?: Record<string, number>;
+}
+
+interface TextureCalibrationReport {
+  finish_id?: string;
+  calibration_type?: string;
+  reference_path?: string;
+  n_trials_completed?: number;
+  n_trials_requested?: number;
+  search_samples?: number;
+  elapsed_s?: number;
+  best_score?: number;
+  best_trial?: number;
+  best_params?: Record<string, number>;
+  trial_scores?: number[];
+  review_images?: Record<string, string>;
+  beauty_review_note?: string;
+  proxy_review_note?: string;
+  substrate_meta?: {
+    substrate_finish_id?: string;
+    paint_finish_id?: string;
+    model?: string;
+  };
 }
 
 interface CategoryReport {
@@ -107,10 +131,10 @@ export function AdminCalibrationViewer() {
   const [finishName, setFinishName] = useState('');
   const [report, setReport] = useState<CalibrationReport | null>(null);
   const [mappings, setMappings] = useState<Mapping[]>([]);
-  const [finishes, setFinishes] = useState<{ id: string; label_zh: string }[]>([]);
+  const [finishes, setFinishes] = useState<{ id: string; label_zh: string; deprecated?: boolean }[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [tab, setTab] = useState<'viewer' | 'mapping' | 'category'>('viewer');
+  const [tab, setTab] = useState<'viewer' | 'texture' | 'category' | 'mapping'>('viewer');
   const [trialImages, setTrialImages] = useState<TrialImage[]>([]);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [navImages, setNavImages] = useState<TrialImage[]>([]);
@@ -131,11 +155,39 @@ export function AdminCalibrationViewer() {
   const [recent, setRecent] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('calv_recent') || '[]'); } catch { return []; }
   });
+  const [recentTexture, setRecentTexture] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('calv_recent_tex') || '[]'); } catch { return []; }
+  });
+  const [textureFinishName, setTextureFinishName] = useState('');
+  const [textureReport, setTextureReport] = useState<TextureCalibrationReport | null>(null);
+  const [textureTrials, setTextureTrials] = useState<TrialImage[]>([]);
+  const [textureLoading, setTextureLoading] = useState(false);
+  const [textureError, setTextureError] = useState('');
+  const [textureLoadKey, setTextureLoadKey] = useState(0);
+  const [textureFinishIds, setTextureFinishIds] = useState<Set<string>>(new Set());
+  const [materialFinishIds, setMaterialFinishIds] = useState<Set<string>>(new Set());
+  const [infoMsg, setInfoMsg] = useState('');
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    axios.get('/api/finishes').then(r => setFinishes(r.data.finishes || [])).catch(() => {});
     axios.get('/api/category-finishes').then(r => setMappings(r.data.mappings || [])).catch(() => {});
+    axios.get('/api/calibration-reports/texture/index')
+      .then(r => setTextureFinishIds(new Set(r.data.finish_ids || [])))
+      .catch(() => {});
+    axios.get('/api/finishes')
+      .then(async (r) => {
+        const list = (r.data.finishes || []).filter((f: { deprecated?: boolean }) => !f.deprecated);
+        setFinishes(list);
+        const mat = new Set<string>();
+        await Promise.all(list.map(async (f: { id: string }) => {
+          try {
+            const av = await axios.get(`/api/calibration-reports/${f.id}/availability`);
+            if (av.data.material) mat.add(f.id);
+          } catch { /* ignore */ }
+        }));
+        setMaterialFinishIds(mat);
+      })
+      .catch(() => {});
   }, []);
 
   const saveRecent = (name: string) => {
@@ -148,6 +200,85 @@ export function AdminCalibrationViewer() {
     const next = [name, ...recentCategories.filter(n => n !== name)].slice(0, 10);
     setRecentCategories(next);
     localStorage.setItem('calv_recent_cat', JSON.stringify(next));
+  };
+
+  const saveRecentTexture = (name: string) => {
+    const next = [name, ...recentTexture.filter(n => n !== name)].slice(0, 10);
+    setRecentTexture(next);
+    localStorage.setItem('calv_recent_tex', JSON.stringify(next));
+  };
+
+  const loadTextureReportFor = async (name: string) => {
+    if (!name) return false;
+    setTextureLoading(true);
+    setTextureError('');
+    try {
+      const [reportRes, trialsRes] = await Promise.all([
+        axios.get(`/api/calibration-reports/texture/${name}`),
+        axios.get(`/api/calibration-reports/texture/${name}/trials`).catch(() => ({ data: { images: [] } })),
+      ]);
+      setTextureReport(reportRes.data);
+      setTextureTrials(trialsRes.data.images || []);
+      setTextureFinishName(name);
+      saveRecentTexture(name);
+      setTab('texture');
+      setTextureLoadKey(k => k + 1);
+      return true;
+    } catch (err: any) {
+      setTextureError(err.response?.status === 404
+        ? `未找到 "${name}" 的纹理校准，请先运行 calibrate.py --scope texture --finish-id ${name} --reference <蚁力crop>`
+        : `加载失败: ${err.message}`);
+      setTextureReport(null);
+      return false;
+    } finally {
+      setTextureLoading(false);
+    }
+  };
+
+  const loadTextureReport = async () => {
+    await loadTextureReportFor(textureFinishName.trim());
+  };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab');
+    const finishParam = params.get('finish');
+    if (tabParam === 'texture' && finishParam) {
+      setTextureFinishName(finishParam);
+      setFinishName(finishParam);
+      setTab('texture');
+      setTimeout(() => loadTextureReportFor(finishParam), 0);
+    }
+  }, []);
+
+  const loadAnyFinishReport = async () => {
+    const name = finishName.trim();
+    if (!name) return;
+    setInfoMsg('');
+    setError('');
+    try {
+      const av = await axios.get(`/api/calibration-reports/${name}/availability`);
+      const hasMat = Boolean(av.data.material);
+      const hasTex = Boolean(av.data.texture);
+      if (hasTex && !hasMat) {
+        setFinishName(name);
+        setInfoMsg(`「${name}」仅有纹理校准（蚁力参考图），已打开纹理对比视图。`);
+        await loadTextureReportFor(name);
+        return;
+      }
+      if (hasMat) {
+        await loadReport();
+        return;
+      }
+      if (hasTex) {
+        setInfoMsg(`「${name}」同时可查看纹理校准，材质球 PBR 报告在「材质校准」页。`);
+        await loadTextureReportFor(name);
+        return;
+      }
+      setError(`未找到 "${name}" 的校准输出。材质: calibrate.py --scope material；纹理: --scope texture --reference <crop>`);
+    } catch (err: any) {
+      setError(`加载失败: ${err.message}`);
+    }
   };
 
   const loadCategoryReport = async () => {
@@ -192,8 +323,16 @@ export function AdminCalibrationViewer() {
       setTab('viewer');
       setLoadKey(k => k + 1);
     } catch (err: any) {
+      if (err.response?.status === 404) {
+        const opened = await loadTextureReportFor(name);
+        if (opened) {
+          setInfoMsg(`「${name}」无材质球 PBR 报告，已切换到纹理校准对比。`);
+          setError('');
+          return;
+        }
+      }
       setError(err.response?.status === 404
-        ? `未找到 "${name}" 的校准报告，请先运行 calibrate.py --mode material --finish-id ${name}`
+        ? `未找到 "${name}" 的材质校准报告。若只跑了纹理校准，请点「纹理校准」页签，或使用下方智能查看。`
         : `加载失败: ${err.message}`);
       setReport(null);
     }
@@ -268,6 +407,10 @@ export function AdminCalibrationViewer() {
           className={`px-4 py-2 text-sm rounded-t ${tab === 'viewer' ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-600' : 'text-gray-600'}`}>
           材质校准
         </button>
+        <button onClick={() => setTab('texture')}
+          className={`px-4 py-2 text-sm rounded-t ${tab === 'texture' ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-600' : 'text-gray-600'}`}>
+          纹理校准
+        </button>
         <button onClick={() => setTab('category')}
           className={`px-4 py-2 text-sm rounded-t ${tab === 'category' ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-600' : 'text-gray-600'}`}>
           类目校准
@@ -288,18 +431,27 @@ export function AdminCalibrationViewer() {
                   className="px-3 py-2 border rounded-lg text-sm w-64 shrink-0 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
                   <option value="">— 选择材质 —</option>
                   {finishes.map(f => (
-                    <option key={f.id} value={f.id}>{f.label_zh} ({f.id})</option>
+                    <option key={f.id} value={f.id}>
+                      {f.label_zh} ({f.id})
+                      {textureFinishIds.has(f.id) && !materialFinishIds.has(f.id) ? ' · 纹理' : ''}
+                      {materialFinishIds.has(f.id) ? ' · 材质' : ''}
+                    </option>
                   ))}
                 </select>
                 <input value={finishName} onChange={e => setFinishName(e.target.value)}
                   placeholder="或直接输入 finish id"
                   className="px-3 py-2 border rounded-lg text-sm w-40 shrink-0 focus:outline-none focus:ring-2 focus:ring-blue-300" />
               </div>
-              <button onClick={loadReport} disabled={loading}
+              <button onClick={loadAnyFinishReport} disabled={loading || textureLoading}
                 className="shrink-0 whitespace-nowrap px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50">
-                {loading ? '加载中...' : '查看'}
+                {loading || textureLoading ? '加载中...' : '查看'}
               </button>
             </div>
+            {finishName && textureFinishIds.has(finishName) && !materialFinishIds.has(finishName) && (
+              <p className="text-xs text-amber-700 mt-2">
+                {finishName} 已跑纹理校准，查看结果请用「纹理校准」页签或直接点「查看」（将自动跳转）。
+              </p>
+            )}
             {recent.length > 0 && (
               <div className="flex items-center gap-1.5 flex-wrap mt-2">
                 <span className="text-xs text-gray-400">最近:</span>
@@ -310,6 +462,8 @@ export function AdminCalibrationViewer() {
               </div>
             )}
           </div>
+
+          {infoMsg && <div className="mb-4 p-3 bg-blue-50 text-blue-800 text-sm rounded">{infoMsg}</div>}
 
           {error && <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded">{error}</div>}
 
@@ -328,7 +482,9 @@ export function AdminCalibrationViewer() {
                 <div className="grid grid-cols-4 gap-4">
                   <div><div className="text-xs text-gray-400">Finish</div><div className="text-lg font-semibold">{report.finish_id}</div></div>
                   <div><div className="text-xs text-gray-400">模式</div><div className="text-lg font-semibold">
-                    {report.calibration_phases?.mode === 'two_phase' ? '两阶段' : '单阶段'}
+                    {report.calibration_phases?.texture_skip_reason === 'reference_texture_module'
+                      ? '材质球 PBR'
+                      : (report.calibration_phases?.mode === 'two_phase' ? '两阶段（球内）' : '单阶段')}
                   </div></div>
                   <div><div className="text-xs text-gray-400">搜索采样</div><div className="text-lg font-semibold">{report.search_samples || 256}</div></div>
                   <div><div className="text-xs text-gray-400">确认采样</div><div className="text-lg font-semibold">{report.confirm_samples || '-'}</div></div>
@@ -392,7 +548,7 @@ export function AdminCalibrationViewer() {
                 <canvas ref={canvasRef} className="w-full h-20" style={{ maxHeight: 80 }} />
               </div>
 
-              {/* Phased trial review: PBR → Texture → Confirm */}
+              {/* Material ball: PBR (+ confirm). Texture → Texture tab / TextureModule */}
               <PhaseCalibrationReview
                 report={report}
                 trialImages={trialImages}
@@ -402,6 +558,13 @@ export function AdminCalibrationViewer() {
                   setSelectedImage(fn);
                   setNavImages(sectionImages);
                 }}
+                onGoTexture={() => {
+                  if (report.finish_id) {
+                    setTextureFinishName(report.finish_id);
+                    loadTextureReportFor(report.finish_id);
+                  }
+                }}
+                hasTextureReport={report.finish_id ? textureFinishIds.has(report.finish_id) : false}
                 picking={picking}
                 pickMsg={pickMsg}
                 onPick={async (filename) => {
@@ -620,6 +783,57 @@ export function AdminCalibrationViewer() {
         </>
       )}
 
+      {tab === 'texture' && (
+        <>
+          <div className="mb-4">
+            <div className="flex flex-nowrap items-center gap-3">
+              <select value={textureFinishName} onChange={e => setTextureFinishName(e.target.value)}
+                className="px-3 py-2 border rounded-lg text-sm w-64 shrink-0 bg-white">
+                <option value="">— 选择材质 —</option>
+                {finishes.map(f => (
+                  <option key={f.id} value={f.id}>{f.label_zh} ({f.id})</option>
+                ))}
+              </select>
+              <input value={textureFinishName} onChange={e => setTextureFinishName(e.target.value)}
+                placeholder="finish id"
+                className="px-3 py-2 border rounded-lg text-sm w-40 shrink-0" />
+              <button onClick={loadTextureReport} disabled={textureLoading}
+                className="shrink-0 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                {textureLoading ? '加载中...' : '查看'}
+              </button>
+            </div>
+            {recentTexture.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap mt-2">
+                <span className="text-xs text-gray-400">最近:</span>
+                {recentTexture.map(n => (
+                  <button key={n} onClick={() => { setTextureFinishName(n); setTimeout(loadTextureReport, 0); }}
+                    className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200">{n}</button>
+                ))}
+              </div>
+            )}
+            <p className="text-xs text-gray-400 mt-2">
+              命令: calibrate.py --scope texture --finish-id &lt;id&gt; --reference outputs/yili_crops/&lt;id&gt;/&lt;id&gt;_crop.png
+            </p>
+          </div>
+
+          {textureError && <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded">{textureError}</div>}
+
+          {!textureReport && !textureLoading && !textureError && (
+            <div className="text-center py-16 text-gray-400 text-sm">
+              <p>选择 finish 查看纹理校准 Beauty / 参考对比</p>
+            </div>
+          )}
+
+          {textureReport && textureReport.finish_id && (
+            <TextureCalibrationReview
+              report={textureReport}
+              trials={textureTrials}
+              loadKey={textureLoadKey}
+            />
+          )}
+        </>
+      )}
+
       {tab === 'mapping' && (
         <div className="bg-white rounded-lg shadow border">
           <table className="w-full text-sm">
@@ -639,7 +853,7 @@ export function AdminCalibrationViewer() {
 
 function MappingRow({ mapping, finishes, onUpdate }: {
   mapping: Mapping;
-  finishes: { id: string; label_zh: string }[];
+  finishes: { id: string; label_zh: string; deprecated?: boolean }[];
   onUpdate: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -991,6 +1205,8 @@ function PhaseCalibrationReview({
   picking,
   pickMsg,
   onPick,
+  onGoTexture,
+  hasTextureReport,
 }: {
   report: CalibrationReport;
   trialImages: TrialImage[];
@@ -1000,6 +1216,8 @@ function PhaseCalibrationReview({
   picking: boolean;
   pickMsg: string;
   onPick: (filename: string) => void;
+  onGoTexture?: () => void;
+  hasTextureReport?: boolean;
 }) {
   const finishId = report.finish_id || '';
   const { pbr, texture, confirm, legacy } = splitTrialImages(trialImages);
@@ -1020,7 +1238,13 @@ function PhaseCalibrationReview({
   const brushMode = report.calibration_phases?.brush_mode || '';
   const isWaveBrush = brushMode === 'wave';
   const textureSkipped = Boolean(report.calibration_phases?.texture_skipped);
-  const phase2Title = isWaveBrush ? '程序化拉丝' : '纹理细节';
+  const texSkipReason = report.calibration_phases?.texture_skip_reason || '';
+  const textureDelegated =
+    textureSkipped &&
+    (texSkipReason === 'reference_texture_module' || texSkipReason === 'texture_profile');
+  const phase2Title = textureDelegated
+    ? '漆面纹理（TextureModule · 独立模块）'
+    : (isWaveBrush ? '程序化方向纹理' : '纹理细节');
   const texKeys: { key: keyof PhaseBest; fmt?: (v: number) => string }[] = isWaveBrush
     ? [
         { key: 'bump_mult', fmt: v => `×${v.toFixed(2)}` },
@@ -1033,12 +1257,16 @@ function PhaseCalibrationReview({
         { key: 'rough_mix' },
       ];
   const textureEmptyHint = textureSkipped
-    ? (report.calibration_phases?.texture_skip_reason === 'skip_texture'
-      ? 'Phase 2 已跳过（使用了 --skip-texture）；请重跑校准以生成拉丝 trial 图'
-      : 'Phase 2 已跳过（无 bakecoat 或已绑定 texture_profile）')
+    ? (texSkipReason === 'reference_texture_module'
+      ? `球体阶段仅校准铝基材+漆层 PBR；漆面纹理（${finishId}）在上方「纹理校准」标签查看 reference trial 与三栏对比图`
+      : texSkipReason === 'texture_profile'
+        ? `球体不写 bakecoat 纹理；${finishId} 漆面参数在「纹理校准」标签（蚁力 reference）`
+        : texSkipReason === 'skip_texture'
+          ? 'Phase 2 已跳过（--skip-texture 或 legacy 单阶段）'
+          : 'Phase 2 已跳过（无 bakecoat 或已绑定 texture_profile）')
     : (isWaveBrush
-      ? '无拉丝 trial 图（texture/ 目录为空或未挂载 calibrate_out）'
-      : '无纹理 trial 图（可能使用了 --skip-texture）');
+      ? '无方向纹理 trial 图（texture/ 目录为空或未挂载 calibrate_out）'
+      : '无球内纹理 trial 图');
 
   const pbrKeys: { key: keyof PhaseBest; fmt?: (v: number) => string }[] = [
     { key: 'roughness' }, { key: 'metallic' }, { key: 'specular' },
@@ -1062,7 +1290,7 @@ function PhaseCalibrationReview({
           <TrialGallerySection
             finishId={finishId}
             step={1}
-            title="PBR 宏观"
+            title="PBR 宏观（材质球）"
             images={pbr}
             gridPhase="pbr"
             loadKey={loadKey}
@@ -1075,28 +1303,47 @@ function PhaseCalibrationReview({
             highlightTrialId={bestPbrId}
           />
 
-          <TrialGallerySection
-            finishId={finishId}
-            step={2}
-            title={phase2Title}
-            images={texture}
-            gridPhase="texture"
-            loadKey={loadKey}
-            selectedImage={selectedImage}
-            onSelectImage={onSelectImage}
-            lockedParams={
-              <>
-                <PhaseParamsBar label="锁定 PBR" params={report.calibration_phases?.pbr} keys={lockedPbrKeys} />
-                <PhaseParamsBar label={isWaveBrush ? 'Phase 2 拉丝最优' : 'Phase 2 最优'} params={report.calibration_phases?.texture} keys={texKeys} />
-              </>
-            }
-            emptyHint={textureEmptyHint}
-            highlightTrialId={bestTexId}
-          />
+          {textureDelegated ? (
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-sm text-slate-700">
+              <div className="font-medium mb-1">纹理不在材质球阶段校准</div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                按当前设计，球体只负责 PBR（铝基材 + 漆层）；<strong>{finishId}</strong> 的漆面纹理由
+                <strong> TextureModule</strong>（平板 + 蚁力参考图）独立搜索，trial 与三栏对比在「纹理校准」页签。
+              </p>
+              {onGoTexture && (
+                <button
+                  type="button"
+                  onClick={onGoTexture}
+                  className="mt-3 text-xs px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  {hasTextureReport ? '打开纹理校准结果' : '前往纹理校准页签'}
+                </button>
+              )}
+            </div>
+          ) : (
+            <TrialGallerySection
+              finishId={finishId}
+              step={2}
+              title={phase2Title}
+              images={texture}
+              gridPhase="texture"
+              loadKey={loadKey}
+              selectedImage={selectedImage}
+              onSelectImage={onSelectImage}
+              lockedParams={
+                <>
+                  <PhaseParamsBar label="锁定 PBR" params={report.calibration_phases?.pbr} keys={lockedPbrKeys} />
+                  <PhaseParamsBar label={isWaveBrush ? 'Phase 2 方向纹理最优' : 'Phase 2 最优'} params={report.calibration_phases?.texture} keys={texKeys} />
+                </>
+              }
+              emptyHint={textureEmptyHint}
+              highlightTrialId={bestTexId}
+            />
+          )}
 
           <TrialGallerySection
             finishId={finishId}
-            step={3}
+            step={textureDelegated ? 2 : 3}
             title={`确认 @ ${report.confirm_stage?.samples || 1024}spp`}
             images={confirm}
             loadKey={loadKey}
@@ -1159,6 +1406,137 @@ function PhaseCalibrationReview({
         <div className="text-center">
           <a href={`/api/calibration-reports/${finishId}/grid`} target="_blank" rel="noreferrer"
             className="text-xs text-blue-600 hover:underline">查看全量汇总图</a>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function TextureCalibrationReview({
+  report,
+  trials,
+  loadKey,
+}: {
+  report: TextureCalibrationReport;
+  trials: TrialImage[];
+  loadKey: number;
+}) {
+  const finishId = report.finish_id || '';
+  const review = report.review_images || {};
+  const imgUrl = (name: string) =>
+    `/api/calibration-reports/texture/${finishId}/images/${name}?_t=${loadKey}`;
+
+  const texParamKeys: { key: string; label: string }[] = [
+    { key: 'bump_strength', label: 'Bump' },
+    { key: 'micro_scale', label: 'Micro scale' },
+    { key: 'micro_detail', label: 'Micro detail' },
+    { key: 'fine_scale', label: 'Fine scale' },
+    { key: 'fine_detail', label: 'Fine detail' },
+    { key: 'rough_mix_factor', label: 'Rough mix' },
+    { key: 'rough_ramp_to_min', label: 'Ramp min' },
+    { key: 'rough_ramp_to_max', label: 'Ramp max' },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-lg shadow p-4">
+        <div className="text-xs font-semibold text-gray-500 uppercase mb-3">纹理校准概览</div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div><div className="text-xs text-gray-400">Finish</div><div className="font-semibold">{finishId}</div></div>
+          <div><div className="text-xs text-gray-400">Best score</div><div className="font-semibold font-mono">{report.best_score?.toFixed(4) ?? '-'}</div></div>
+          <div><div className="text-xs text-gray-400">Best trial</div><div className="font-semibold">#{report.best_trial ?? '-'}</div></div>
+          <div><div className="text-xs text-gray-400">Trials</div><div className="font-semibold">{report.n_trials_completed ?? '-'}</div></div>
+        </div>
+        {report.reference_path && (
+          <div className="mt-2 text-xs text-gray-400 truncate">参考: {report.reference_path}</div>
+        )}
+        {report.substrate_meta?.substrate_finish_id && (
+          <div className="mt-1 text-xs text-gray-500">
+            铝基材: {report.substrate_meta.substrate_finish_id} · 漆面: {report.substrate_meta.paint_finish_id || finishId}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-lg shadow p-4">
+        <div className="text-xs font-semibold text-gray-500 uppercase mb-3">Beauty vs 参考对比</div>
+        <p className="text-xs text-gray-400 mb-3">
+          合成图可能抹平细颗粒，请点开下方单张 Beauty / Roughness 查看。右栏为伪彩色粗糙度可视化（蓝低黄高）。
+        </p>
+        {(report.beauty_review_note || report.proxy_review_note) && (
+          <div className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded p-2 mb-3 space-y-1">
+            {report.beauty_review_note && <p>{report.beauty_review_note}</p>}
+            {report.proxy_review_note && <p>{report.proxy_review_note}</p>}
+          </div>
+        )}
+        {review.compare_triple ? (
+          <img src={imgUrl(review.compare_triple)} alt="compare triple"
+            className="w-full rounded border bg-black mb-3" />
+        ) : null}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {review.reference && (
+              <div>
+                <div className="text-xs text-gray-500 mb-1">参考</div>
+                <img src={imgUrl(review.reference)} className="w-full rounded border" alt="reference" />
+              </div>
+            )}
+            {review.beauty_best && (
+              <div>
+                <div className="text-xs text-gray-500 mb-1">Beauty（审查）</div>
+                <img src={imgUrl(review.beauty_best)} className="w-full rounded border bg-gray-900" alt="beauty" />
+              </div>
+            )}
+            {review.proxy_best && (
+              <div>
+                <div className="text-xs text-gray-500 mb-1">粗糙度伪彩色</div>
+                <img src={imgUrl(review.proxy_best)} className="w-full rounded border bg-black" alt="proxy" />
+              </div>
+            )}
+        </div>
+        {review.compare_beauty_ref && (
+          <div className="mt-3">
+            <div className="text-xs text-gray-500 mb-1">参考 vs Beauty</div>
+            <img src={imgUrl(review.compare_beauty_ref)} className="w-full max-w-2xl rounded border" alt="compare pair" />
+          </div>
+        )}
+      </div>
+
+      {report.best_params && (
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="text-xs font-semibold text-gray-500 uppercase mb-3">最优 bakecoat 参数</div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm font-mono">
+            {texParamKeys.map(({ key, label }) => {
+              const v = report.best_params?.[key];
+              if (v === undefined) return null;
+              return (
+                <div key={key} className="bg-gray-50 rounded px-2 py-1">
+                  <span className="text-gray-500 text-xs">{label}</span>
+                  <div>{typeof v === 'number' ? v.toFixed(4) : v}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {trials.length > 0 && (
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="text-xs font-semibold text-gray-500 uppercase mb-3">
+            搜索 Trial（Roughness 代理 pass）
+          </div>
+          <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
+            {trials.map(t => (
+              <div key={t.filename}
+                className={`rounded border overflow-hidden ${t.is_best ? 'ring-2 ring-green-500' : ''}`}>
+                <img src={imgUrl(t.filename)} alt={t.trial_id}
+                  className="w-full aspect-square object-cover bg-black" />
+                <div className="p-1 text-[10px] text-center text-gray-500">
+                  {t.trial_id.replace('trial_', '#')}
+                  {t.score != null && <span className="font-mono"> · {t.score.toFixed(3)}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
