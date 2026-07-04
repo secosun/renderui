@@ -66,11 +66,83 @@ interface CalibrationReport {
 interface TrialImage {
   filename: string;
   trial_id: string;
+  trial_num?: number | null;
   score: number | null;
+  flat_score?: number | null;
+  proxy_score?: number | null;
+  beauty_pbr_score?: number | null;
   phase?: string;
   is_best?: boolean;
+  companion?: string | null;
 }
 
+interface TextureTrialDetail {
+  trial: number;
+  score?: number;
+  flat_score?: number;
+  proxy_score?: number;
+  beauty_pbr_score?: number;
+  beauty_score?: number;
+  composite_match?: number;
+  params?: Record<string, number>;
+  images?: Record<string, string>;
+}
+
+interface CalibrationRunMeta {
+  run_id: string;
+  label?: string;
+  best_score?: number;
+  beauty_pbr_score?: number;
+  best_trial?: number;
+  n_trials_completed?: number;
+  elapsed_s?: number;
+  mtime?: string;
+  path?: string;
+  calibration_type?: string;
+}
+
+type TextureRunMeta = CalibrationRunMeta;
+
+interface TextureCalibrationReport {
+  finish_id?: string;
+  calibration_type?: string;
+  reference_path?: string;
+  reference_resolution?: { g1_primary?: string; primary_path?: string };
+  n_trials_completed?: number;
+  n_trials_requested?: number;
+  search_samples?: number;
+  elapsed_s?: number;
+  best_score?: number;
+  best_trial?: number;
+  best_params?: Record<string, number>;
+  trial_scores?: number[];
+  trial_details?: TextureTrialDetail[];
+  review_images?: Record<string, string | string[]>;
+  beauty_review_note?: string;
+  proxy_review_note?: string;
+  search_mode?: string;
+  scoring_pass?: string;
+  canonical_source?: string;
+  match_target?: number;
+  warm_start_meta?: Record<string, unknown>;
+  best_match_metrics?: Record<string, number>;
+  artifact_run_id?: string;
+  artifact_dir?: string;
+  g1_beauty_pbr_score?: number;
+  ui_manifest?: {
+    layout_version?: number;
+    g1_primary_image?: string;
+    primary_params?: string[];
+    display_scores?: Record<string, number | null | undefined>;
+    review_groups?: Record<string, { label: string; items: Record<string, string | string[]> }>;
+    defaults?: Record<string, boolean>;
+  };
+  substrate_meta?: {
+    substrate_finish_id?: string;
+    paint_finish_id?: string;
+    model?: string;
+  };
+}
 interface Mapping {
   category_key: string;
   finish_id: string;
@@ -86,28 +158,6 @@ interface CategoryCandidate {
   params: Record<string, number>;
   image: string;
   dims?: Record<string, number>;
-}
-
-interface TextureCalibrationReport {
-  finish_id?: string;
-  calibration_type?: string;
-  reference_path?: string;
-  n_trials_completed?: number;
-  n_trials_requested?: number;
-  search_samples?: number;
-  elapsed_s?: number;
-  best_score?: number;
-  best_trial?: number;
-  best_params?: Record<string, number>;
-  trial_scores?: number[];
-  review_images?: Record<string, string>;
-  beauty_review_note?: string;
-  proxy_review_note?: string;
-  substrate_meta?: {
-    substrate_finish_id?: string;
-    paint_finish_id?: string;
-    model?: string;
-  };
 }
 
 interface CategoryReport {
@@ -161,9 +211,14 @@ export function AdminCalibrationViewer() {
   const [textureFinishName, setTextureFinishName] = useState('');
   const [textureReport, setTextureReport] = useState<TextureCalibrationReport | null>(null);
   const [textureTrials, setTextureTrials] = useState<TrialImage[]>([]);
+  const [textureRuns, setTextureRuns] = useState<TextureRunMeta[]>([]);
+  const [textureRunId, setTextureRunId] = useState<string>('');
+  const [textureProgressStatus, setTextureProgressStatus] = useState<string>('');
   const [textureLoading, setTextureLoading] = useState(false);
   const [textureError, setTextureError] = useState('');
   const [textureLoadKey, setTextureLoadKey] = useState(0);
+  const [materialRuns, setMaterialRuns] = useState<CalibrationRunMeta[]>([]);
+  const [materialRunId, setMaterialRunId] = useState('');
   const [textureFinishIds, setTextureFinishIds] = useState<Set<string>>(new Set());
   const [materialFinishIds, setMaterialFinishIds] = useState<Set<string>>(new Set());
   const [infoMsg, setInfoMsg] = useState('');
@@ -208,17 +263,26 @@ export function AdminCalibrationViewer() {
     localStorage.setItem('calv_recent_tex', JSON.stringify(next));
   };
 
-  const loadTextureReportFor = async (name: string) => {
+  const loadTextureReportFor = async (name: string, runId?: string) => {
     if (!name) return false;
     setTextureLoading(true);
     setTextureError('');
     try {
-      const [reportRes, trialsRes] = await Promise.all([
-        axios.get(`/api/calibration-reports/texture/${name}`),
-        axios.get(`/api/calibration-reports/texture/${name}/trials`).catch(() => ({ data: { images: [] } })),
+      const runsRes = await axios.get(`/api/calibration-reports/texture/${name}/runs`).catch(() => null);
+      const runs: TextureRunMeta[] = runsRes?.data?.runs || [];
+      setTextureRuns(runs);
+      const effectiveRun = runId || runsRes?.data?.latest_run_id || runs[0]?.run_id || '';
+      setTextureRunId(effectiveRun);
+
+      const runParam = effectiveRun ? { run: effectiveRun } : {};
+      const [reportRes, trialsRes, progressRes] = await Promise.all([
+        axios.get(`/api/calibration-reports/texture/${name}`, { params: runParam }),
+        axios.get(`/api/calibration-reports/texture/${name}/trials`, { params: runParam }).catch(() => ({ data: { images: [], trial_details: [] } })),
+        axios.get(`/api/calibration-reports/texture/${name}/progress`, { params: runParam }).catch(() => null),
       ]);
       setTextureReport(reportRes.data);
       setTextureTrials(trialsRes.data.images || []);
+      setTextureProgressStatus(progressRes?.data?.status || 'complete');
       setTextureFinishName(name);
       saveRecentTexture(name);
       setTab('texture');
@@ -229,7 +293,32 @@ export function AdminCalibrationViewer() {
         ? `未找到 "${name}" 的纹理校准，请先运行 calibrate.py --scope texture --finish-id ${name} --reference <蚁力crop>`
         : `加载失败: ${err.message}`);
       setTextureReport(null);
+      setTextureRuns([]);
       return false;
+    } finally {
+      setTextureLoading(false);
+    }
+  };
+
+  const reloadTextureRun = async (runId: string) => {
+    const name = textureFinishName.trim();
+    if (!name) return;
+    setTextureRunId(runId);
+    setTextureLoading(true);
+    setTextureError('');
+    try {
+      const runParam = runId ? { run: runId } : {};
+      const [reportRes, trialsRes, progressRes] = await Promise.all([
+        axios.get(`/api/calibration-reports/texture/${name}`, { params: runParam }),
+        axios.get(`/api/calibration-reports/texture/${name}/trials`, { params: runParam }).catch(() => ({ data: { images: [] } })),
+        axios.get(`/api/calibration-reports/texture/${name}/progress`, { params: runParam }).catch(() => null),
+      ]);
+      setTextureReport(reportRes.data);
+      setTextureTrials(trialsRes.data.images || []);
+      setTextureProgressStatus(progressRes?.data?.status || 'complete');
+      setTextureLoadKey(k => k + 1);
+    } catch (err: any) {
+      setTextureError(`切换 run 失败: ${err.message}`);
     } finally {
       setTextureLoading(false);
     }
@@ -250,6 +339,35 @@ export function AdminCalibrationViewer() {
       setTimeout(() => loadTextureReportFor(finishParam), 0);
     }
   }, []);
+
+  useEffect(() => {
+    if (textureProgressStatus !== 'running' || !textureFinishName.trim()) return;
+    const name = textureFinishName.trim();
+    const runParam = textureRunId ? { run: textureRunId } : {};
+    const timer = window.setInterval(async () => {
+      try {
+        const [progressRes, trialsRes] = await Promise.all([
+          axios.get(`/api/calibration-reports/texture/${name}/progress`, { params: runParam }),
+          axios.get(`/api/calibration-reports/texture/${name}/trials`, { params: runParam }),
+        ]);
+        setTextureProgressStatus(progressRes.data.status || 'running');
+        setTextureTrials(trialsRes.data.images || []);
+        if (progressRes.data.trial_details?.length) {
+          setTextureReport(prev => prev ? {
+            ...prev,
+            n_trials_completed: progressRes.data.n_trials_completed,
+            trial_details: progressRes.data.trial_details,
+          } : prev);
+        }
+        if (progressRes.data.status === 'complete') {
+          const reportRes = await axios.get(`/api/calibration-reports/texture/${name}`, { params: runParam });
+          setTextureReport(reportRes.data);
+          setTextureLoadKey(k => k + 1);
+        }
+      } catch { /* ignore poll errors */ }
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [textureProgressStatus, textureFinishName, textureRunId]);
 
   const loadAnyFinishReport = async () => {
     const name = finishName.trim();
@@ -305,7 +423,7 @@ export function AdminCalibrationViewer() {
     setCategoryLoading(false);
   };
 
-  const loadReport = async () => {
+  const loadReport = async (runId?: string) => {
     const name = finishName.trim();
     if (!name) return;
     setLoading(true);
@@ -313,9 +431,16 @@ export function AdminCalibrationViewer() {
     setSelectedImage(null);
     setNavImages([]);
     try {
+      const runsRes = await axios.get(`/api/calibration-reports/${name}/runs`).catch(() => null);
+      const runs: CalibrationRunMeta[] = runsRes?.data?.runs || [];
+      setMaterialRuns(runs);
+      const effectiveRun = runId || runsRes?.data?.latest_run_id || runs[0]?.run_id || '';
+      setMaterialRunId(effectiveRun);
+
+      const runParam = effectiveRun ? { run: effectiveRun } : {};
       const [reportRes, trialsRes] = await Promise.all([
-        axios.get(`/api/calibration-reports/${name}`),
-        axios.get(`/api/calibration-reports/${name}/trials`).catch(() => ({ data: { images: [] } })),
+        axios.get(`/api/calibration-reports/${name}`, { params: runParam }),
+        axios.get(`/api/calibration-reports/${name}/trials`, { params: runParam }).catch(() => ({ data: { images: [] } })),
       ]);
       setReport(reportRes.data);
       setTrialImages(trialsRes.data.images || []);
@@ -328,6 +453,7 @@ export function AdminCalibrationViewer() {
         if (opened) {
           setInfoMsg(`「${name}」无材质球 PBR 报告，已切换到纹理校准对比。`);
           setError('');
+          setMaterialRuns([]);
           return;
         }
       }
@@ -335,8 +461,32 @@ export function AdminCalibrationViewer() {
         ? `未找到 "${name}" 的材质校准报告。若只跑了纹理校准，请点「纹理校准」页签，或使用下方智能查看。`
         : `加载失败: ${err.message}`);
       setReport(null);
+      setMaterialRuns([]);
     }
     setLoading(false);
+  };
+
+  const reloadMaterialRun = async (runId: string) => {
+    const name = finishName.trim();
+    if (!name) return;
+    setMaterialRunId(runId);
+    setLoading(true);
+    setError('');
+    setSelectedImage(null);
+    try {
+      const runParam = runId ? { run: runId } : {};
+      const [reportRes, trialsRes] = await Promise.all([
+        axios.get(`/api/calibration-reports/${name}`, { params: runParam }),
+        axios.get(`/api/calibration-reports/${name}/trials`, { params: runParam }).catch(() => ({ data: { images: [] } })),
+      ]);
+      setReport(reportRes.data);
+      setTrialImages(trialsRes.data.images || []);
+      setLoadKey(k => k + 1);
+    } catch (err: any) {
+      setError(`切换 run 失败: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const paramSpecs = [
@@ -446,7 +596,37 @@ export function AdminCalibrationViewer() {
                 className="shrink-0 whitespace-nowrap px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50">
                 {loading || textureLoading ? '加载中...' : '查看'}
               </button>
+              {materialRuns.length > 0 && (
+                <select
+                  value={materialRunId}
+                  onChange={e => reloadMaterialRun(e.target.value)}
+                  className="px-3 py-2 border rounded-lg text-sm w-56 shrink-0 bg-white"
+                  disabled={loading}
+                >
+                  {materialRuns.map(r => {
+                    const dateStr = r.mtime
+                      ? new Date(r.mtime).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })
+                      : '';
+                    const trialInfo = r.n_trials_completed != null ? ` · ${r.n_trials_completed}次` : '';
+                    const labelInfo = r.label && r.label !== r.run_id ? ` · ${r.label}` : '';
+                    const scoreInfo = r.best_score != null ? ` · ${r.best_score.toFixed(2)}` : '';
+                    return (
+                      <option key={r.run_id} value={r.run_id}>
+                        {dateStr}{trialInfo}{labelInfo}{scoreInfo}
+                      </option>
+                    );
+                  })}
+                </select>
+              )}
             </div>
+            {materialRuns.length > 0 && report && (
+              <div className="text-xs text-gray-500 mt-2">
+                Run: <span className="font-mono">{materialRunId || 'default'}</span>
+                {report.selected_from && (
+                  <span className="ml-2 text-gray-400">· 定稿来源 {report.selected_from}</span>
+                )}
+              </div>
+            )}
             {finishName && textureFinishIds.has(finishName) && !materialFinishIds.has(finishName) && (
               <p className="text-xs text-amber-700 mt-2">
                 {finishName} 已跑纹理校准，查看结果请用「纹理校准」页签或直接点「查看」（将自动跳转）。
@@ -553,6 +733,7 @@ export function AdminCalibrationViewer() {
                 report={report}
                 trialImages={trialImages}
                 loadKey={loadKey}
+                runId={materialRunId}
                 selectedImage={selectedImage}
                 onSelectImage={(fn, sectionImages) => {
                   setSelectedImage(fn);
@@ -571,8 +752,9 @@ export function AdminCalibrationViewer() {
                   if (!report.finish_id) return;
                   setPicking(true); setPickMsg('');
                   try {
+                    const runParam = materialRunId ? { run: materialRunId } : {};
                     await axios.post(`/api/calibration-reports/${report.finish_id}/select-trial`,
-                      { filename });
+                      { filename }, { params: runParam });
                     setPickMsg('已保存为人眼最佳');
                   } catch (err: any) {
                     setPickMsg('保存失败: ' + (err.response?.data?.detail || err.message));
@@ -580,6 +762,17 @@ export function AdminCalibrationViewer() {
                   setPicking(false);
                 }}
               />
+
+              {report.finish_id && textureFinishIds.has(report.finish_id) && (
+                <TextureBeautyPbrPanel
+                  finishId={report.finish_id}
+                  loadKey={loadKey}
+                  onOpenFull={() => {
+                    setTextureFinishName(report.finish_id!);
+                    loadTextureReportFor(report.finish_id!);
+                  }}
+                />
+              )}
 
               {/* Texture profile combo preview (post-calibration) */}
               {report.finish_id && (
@@ -607,7 +800,7 @@ export function AdminCalibrationViewer() {
                     <div>
                       <div className="text-xs text-gray-500 mb-1">校准前 (baseline)</div>
                       <img key={`baseline-${loadKey}`}
-                        src={`/api/calibration-reports/${report.finish_id}/validation/product_baseline.png?_t=${loadKey}`}
+                        src={`/api/calibration-reports/${report.finish_id}/validation/product_baseline.png${materialRunQuery(materialRunId, loadKey)}`}
                         alt="product baseline"
                         className="w-full rounded-lg border bg-gray-50"
                         onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
@@ -619,7 +812,7 @@ export function AdminCalibrationViewer() {
                     <div>
                       <div className="text-xs text-gray-500 mb-1">校准后 (candidate)</div>
                       <img key={`candidate-${loadKey}`}
-                        src={`/api/calibration-reports/${report.finish_id}/validation/product_candidate.png?_t=${loadKey}`}
+                        src={`/api/calibration-reports/${report.finish_id}/validation/product_candidate.png${materialRunQuery(materialRunId, loadKey)}`}
                         alt="product candidate"
                         className="w-full rounded-lg border bg-gray-50"
                         onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
@@ -801,7 +994,41 @@ export function AdminCalibrationViewer() {
                 className="shrink-0 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50">
                 {textureLoading ? '加载中...' : '查看'}
               </button>
+              {textureRuns.length > 0 && (
+                <select
+                  value={textureRunId}
+                  onChange={e => reloadTextureRun(e.target.value)}
+                  className="px-3 py-2 border rounded-lg text-sm w-56 shrink-0 bg-white"
+                  disabled={textureLoading}
+                >
+                  {textureRuns.map(r => {
+                    const dateStr = r.mtime
+                      ? new Date(r.mtime).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })
+                      : '';
+                    const trialInfo = r.n_trials_completed != null ? ` · ${r.n_trials_completed}次` : '';
+                    const scoreInfo = (r as CalibrationRunMeta & { beauty_pbr_score?: number }).beauty_pbr_score != null
+                      ? ` · PBR ${((r as CalibrationRunMeta & { beauty_pbr_score?: number }).beauty_pbr_score!).toFixed(3)}`
+                      : r.best_score != null ? ` · ${r.best_score.toFixed(3)}` : '';
+                    return (
+                      <option key={r.run_id} value={r.run_id}>
+                        {dateStr}{trialInfo}{scoreInfo}
+                      </option>
+                    );
+                  })}
+                </select>
+              )}
             </div>
+            {textureRuns.length > 0 && (
+              <div className="text-xs text-gray-500 mt-2">
+                Run: <span className="font-mono">{textureRunId || 'default'}</span>
+                {textureProgressStatus === 'running' && (
+                  <span className="ml-2 text-amber-600">校准进行中…</span>
+                )}
+                {textureReport?.search_mode && (
+                  <span className="ml-2 text-gray-400">· {textureReport.search_mode}</span>
+                )}
+              </div>
+            )}
             {recentTexture.length > 0 && (
               <div className="flex items-center gap-1.5 flex-wrap mt-2">
                 <span className="text-xs text-gray-400">最近:</span>
@@ -829,6 +1056,7 @@ export function AdminCalibrationViewer() {
               report={textureReport}
               trials={textureTrials}
               loadKey={textureLoadKey}
+              runId={textureRunId}
             />
           )}
         </>
@@ -914,10 +1142,20 @@ function MappingRow({ mapping, finishes, onUpdate }: {
 }
 
 
-function calImageUrl(finishId: string, filename: string, review = true): string {
+function materialRunQuery(runId?: string, loadKey?: number, extra?: Record<string, string>): string {
+  const params = new URLSearchParams();
+  if (runId) params.set('run', runId);
+  if (loadKey !== undefined) params.set('_t', String(loadKey));
+  if (extra) Object.entries(extra).forEach(([k, v]) => params.set(k, v));
+  const s = params.toString();
+  return s ? `?${s}` : '';
+}
+
+function calImageUrl(finishId: string, filename: string, review = true, runId?: string): string {
   const path = review ? reviewFilename(filename) : filename;
   const encoded = path.split('/').map(encodeURIComponent).join('/');
-  return `/api/calibration-reports/${finishId}/images/${encoded}`;
+  const qs = materialRunQuery(runId);
+  return `/api/calibration-reports/${finishId}/images/${encoded}${qs}`;
 }
 
 function reviewFilename(base: string): string {
@@ -1039,18 +1277,20 @@ function PhaseParamsBar({ label, params, keys }: {
 
 function CalTrialThumb({
   finishId,
+  runId,
   img,
   selected,
   highlight,
   onClick,
 }: {
   finishId: string;
+  runId?: string;
   img: TrialImage;
   selected: boolean;
   highlight?: boolean;
   onClick: () => void;
 }) {
-  const [src, setSrc] = useState(() => calImageUrl(finishId, img.filename, true));
+  const [src, setSrc] = useState(() => calImageUrl(finishId, img.filename, true, runId));
   return (
     <button type="button" onClick={onClick}
       className={`relative rounded-lg border-2 overflow-hidden hover:border-blue-400 transition-colors ${
@@ -1067,7 +1307,7 @@ function CalTrialThumb({
         src={src}
         alt={img.filename}
         className="w-full aspect-square object-cover bg-gray-100"
-        onError={() => setSrc(calImageUrl(finishId, img.filename, false))}
+        onError={() => setSrc(calImageUrl(finishId, img.filename, false, runId))}
       />
       {img.score !== null && img.score !== undefined && (
         <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] px-1 py-0.5 text-center truncate">
@@ -1080,6 +1320,7 @@ function CalTrialThumb({
 
 function TrialGallerySection({
   finishId,
+  runId,
   title,
   step,
   images,
@@ -1092,6 +1333,7 @@ function TrialGallerySection({
   emptyHint,
 }: {
   finishId: string;
+  runId?: string;
   title: string;
   step: number;
   images: TrialImage[];
@@ -1128,7 +1370,7 @@ function TrialGallerySection({
 
       {showGrid && gridPhase && (
         <img
-          src={`/api/calibration-reports/${finishId}/grid?phase=${gridPhase}&_t=${loadKey}`}
+          src={`/api/calibration-reports/${finishId}/grid${materialRunQuery(runId, loadKey, { phase: gridPhase })}`}
           alt={`${title} grid`}
           className="w-full rounded-lg border mb-4"
           onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
@@ -1144,11 +1386,11 @@ function TrialGallerySection({
             <div className="shrink-0 w-full max-w-lg">
               <img
                 key={`sel-${loadKey}-${selectedImage}`}
-                src={calImageUrl(finishId, selectedImage, true)}
+                src={calImageUrl(finishId, selectedImage, true, runId)}
                 alt={selectedImage}
                 className="w-full rounded-lg border shadow-lg bg-gray-50"
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src = calImageUrl(finishId, selectedImage, false);
+                  (e.target as HTMLImageElement).src = calImageUrl(finishId, selectedImage, false, runId);
                 }}
               />
             </div>
@@ -1177,8 +1419,9 @@ function TrialGallerySection({
         <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
           {images.map(img => (
             <CalTrialThumb
-              key={img.filename}
+              key={`${img.filename}-${loadKey}-${runId || ''}`}
               finishId={finishId}
+              runId={runId}
               img={img}
               selected={selectedImage === img.filename}
               highlight={!!highlightTrialId && img.trial_id.startsWith(highlightTrialId)}
@@ -1200,6 +1443,7 @@ function PhaseCalibrationReview({
   report,
   trialImages,
   loadKey,
+  runId,
   selectedImage,
   onSelectImage,
   picking,
@@ -1211,6 +1455,7 @@ function PhaseCalibrationReview({
   report: CalibrationReport;
   trialImages: TrialImage[];
   loadKey: number;
+  runId?: string;
   selectedImage: string | null;
   onSelectImage: (fn: string | null, section: TrialImage[]) => void;
   picking: boolean;
@@ -1289,6 +1534,7 @@ function PhaseCalibrationReview({
         <>
           <TrialGallerySection
             finishId={finishId}
+            runId={runId}
             step={1}
             title="PBR 宏观（材质球）"
             images={pbr}
@@ -1304,12 +1550,15 @@ function PhaseCalibrationReview({
           />
 
           {textureDelegated ? (
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-sm text-slate-700">
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-sm text-slate-700 space-y-3">
               <div className="font-medium mb-1">纹理不在材质球阶段校准</div>
               <p className="text-xs text-slate-600 leading-relaxed">
                 按当前设计，球体只负责 PBR（铝基材 + 漆层）；<strong>{finishId}</strong> 的漆面纹理由
                 <strong> TextureModule</strong>（平板 + 蚁力参考图）独立搜索，trial 与三栏对比在「纹理校准」页签。
               </p>
+              {hasTextureReport && (
+                <TextureBeautyPbrPanel finishId={finishId} loadKey={loadKey} />
+              )}
               {onGoTexture && (
                 <button
                   type="button"
@@ -1323,6 +1572,7 @@ function PhaseCalibrationReview({
           ) : (
             <TrialGallerySection
               finishId={finishId}
+              runId={runId}
               step={2}
               title={phase2Title}
               images={texture}
@@ -1343,6 +1593,7 @@ function PhaseCalibrationReview({
 
           <TrialGallerySection
             finishId={finishId}
+            runId={runId}
             step={textureDelegated ? 2 : 3}
             title={`确认 @ ${report.confirm_stage?.samples || 1024}spp`}
             images={confirm}
@@ -1356,6 +1607,7 @@ function PhaseCalibrationReview({
       ) : (
         <TrialGallerySection
           finishId={finishId}
+          runId={runId}
           step={1}
           title="搜索 Trial"
           images={legacy.length ? legacy : trialImages}
@@ -1404,7 +1656,7 @@ function PhaseCalibrationReview({
 
       {!isTwoPhase && trialImages.length > 0 && (
         <div className="text-center">
-          <a href={`/api/calibration-reports/${finishId}/grid`} target="_blank" rel="noreferrer"
+          <a href={`/api/calibration-reports/${finishId}/grid${materialRunQuery(runId)}`} target="_blank" rel="noreferrer"
             className="text-xs text-blue-600 hover:underline">查看全量汇总图</a>
         </div>
       )}
@@ -1413,131 +1665,540 @@ function PhaseCalibrationReview({
 }
 
 
+function TextureBeautyPbrPanel({
+  finishId,
+  loadKey,
+  runId,
+  beautyReviewNote,
+  onOpenFull,
+}: {
+  finishId: string;
+  loadKey: number;
+  runId?: string;
+  beautyReviewNote?: string;
+  onOpenFull?: () => void;
+}) {
+  const runQs = runId ? `&run=${encodeURIComponent(runId)}` : '';
+  const imgUrl = (name: string) =>
+    `/api/calibration-reports/texture/${finishId}/images/${name}?_t=${loadKey}${runQs}`;
+
+  return (
+    <div className="bg-white rounded-lg shadow p-4">
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="text-xs font-semibold text-gray-500 uppercase">G1 实物效果（Beauty PBR）</div>
+        {onOpenFull && (
+          <button type="button" onClick={onOpenFull}
+            className="text-xs px-2 py-1 text-blue-600 hover:bg-blue-50 rounded">
+            完整纹理校准视图 →
+          </button>
+        )}
+      </div>
+        <p className="text-xs text-gray-400 mb-3">
+          参考实拍 vs PBR 微距光渲染。两栏与 reference.png 同分辨率（仅裁切对齐，不缩放）。
+        </p>
+      {beautyReviewNote && (
+        <div className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded p-2 mb-3">
+          {beautyReviewNote}
+        </div>
+      )}
+      <img
+        src={imgUrl('compare_beauty_pbr.png')}
+        alt="compare beauty PBR"
+        className="w-full rounded border bg-black"
+        onError={(e) => {
+          const el = e.target as HTMLImageElement;
+          if (el.dataset.fallback !== '1') {
+            el.dataset.fallback = '1';
+            el.src = imgUrl('beauty_best.png');
+          } else {
+            el.style.display = 'none';
+          }
+        }}
+      />
+    </div>
+  );
+}
+
+
+const REVIEW_IMAGE_LABELS: Record<string, string> = {
+  reference: '参考 G1',
+  beauty_best: 'Beauty 最优',
+  beauty_texture: 'Beauty 纹理细节',
+  proxy_best: 'Proxy 最优',
+  proxy_texture: 'Proxy 纹理细节',
+  compare_triple: '三栏合成',
+  compare_beauty_ref: '参考 vs Scorer',
+  compare_beauty_pbr: '参考 vs Beauty PBR',
+};
+
+const TEXTURE_PRIMARY_PARAM_KEYS = [
+  'bump_strength', 'micro_scale', 'micro_detail', 'fine_scale', 'fine_detail', 'fine_bump_weight',
+];
+
+function CollapsiblePanel({
+  title,
+  badge,
+  defaultOpen = false,
+  muted = false,
+  children,
+}: {
+  title: string;
+  badge?: string;
+  defaultOpen?: boolean;
+  muted?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className={`rounded-lg shadow border ${muted ? 'bg-slate-50 border-slate-200' : 'bg-white border-gray-100'}`}>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left"
+      >
+        <span className="text-xs font-semibold text-gray-600 uppercase">{title}</span>
+        <span className="flex items-center gap-2 text-xs text-gray-400">
+          {badge && <span className="font-mono">{badge}</span>}
+          {open ? '▾' : '▸'}
+        </span>
+      </button>
+      {open && <div className="px-4 pb-4 border-t border-gray-100">{children}</div>}
+    </div>
+  );
+}
+
+function TextureStatusBar({ report, runId }: { report: TextureCalibrationReport; runId?: string }) {
+  const g1 = report.g1_beauty_pbr_score
+    ?? report.ui_manifest?.display_scores?.g1_beauty_pbr
+    ?? report.best_match_metrics?.beauty_pbr_score;
+  const g1Ref = report.reference_resolution?.g1_primary
+    || report.reference_path?.split(/[/\\]/).pop()
+    || '';
+  return (
+    <div className="bg-white rounded-lg shadow px-4 py-3 text-sm">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className="font-semibold">{report.finish_id}</span>
+        {runId && <span className="text-gray-400">· run <span className="font-mono">{runId}</span></span>}
+        <span className="text-gray-400">· trial #{report.best_trial ?? '-'}</span>
+        {g1 != null && (
+          <span className="font-mono text-red-700">· G1 PBR {g1.toFixed(4)}</span>
+        )}
+        {report.match_target != null && (
+          <span className="text-gray-500">· 目标 ≥ {report.match_target.toFixed(2)}</span>
+        )}
+        <span className="text-gray-400">· {report.n_trials_completed ?? '-'}/{report.n_trials_requested ?? '-'} trials</span>
+        {report.elapsed_s != null && <span className="text-gray-400">· {report.elapsed_s.toFixed(0)}s</span>}
+      </div>
+      <div className="mt-1 text-xs text-gray-400 truncate">
+        {report.search_mode && <span>{report.search_mode} · </span>}
+        G1: {g1Ref}
+        {report.substrate_meta?.substrate_finish_id && (
+          <span> · 铝基材 {report.substrate_meta.substrate_finish_id}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TextureG1Hero({
+  review,
+  beautyReviewNote,
+  imgUrl,
+}: {
+  review: Record<string, string | string[]>;
+  beautyReviewNote?: string;
+  imgUrl: (name: string) => string;
+}) {
+  const compare = typeof review.compare_beauty_pbr === 'string' ? review.compare_beauty_pbr : null;
+  const reference = typeof review.reference === 'string' ? review.reference : null;
+  const beautyBest = typeof review.beauty_best === 'string' ? review.beauty_best : null;
+  if (!compare && !reference && !beautyBest) return null;
+
+  return (
+    <div className="bg-white rounded-lg shadow p-4 ring-2 ring-red-100">
+      <div className="text-xs font-semibold text-red-700 uppercase mb-2">G1 验收主视图</div>
+      <p className="text-xs text-gray-500 mb-3">
+        以 compare_beauty_pbr 为准（左参考实拍 · 右 Beauty PBR，已合成单图）。
+      </p>
+      {beautyReviewNote && (
+        <div className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded p-2 mb-3">
+          {beautyReviewNote}
+        </div>
+      )}
+      {compare ? (
+        <img
+          src={imgUrl(compare)}
+          alt="compare beauty PBR"
+          className="w-full rounded border bg-black"
+        />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {reference && (
+            <div>
+              <div className="text-xs text-gray-500 mb-1">G1 参考（无合成图 fallback）</div>
+              <img src={imgUrl(reference)} alt="reference" className="w-full rounded border" />
+            </div>
+          )}
+          {beautyBest && (
+            <div>
+              <div className="text-xs text-gray-500 mb-1">Beauty PBR（无合成图 fallback）</div>
+              <img src={imgUrl(beautyBest)} alt="beauty" className="w-full rounded border bg-gray-900" />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TextureTrialTrendChart({
+  details,
+  bestTrial,
+  matchTarget,
+  showDebugScores = false,
+}: {
+  details: TextureTrialDetail[];
+  bestTrial?: number | null;
+  matchTarget?: number;
+  showDebugScores?: boolean;
+}) {
+  const scored = details.filter(d => d.score != null || d.beauty_pbr_score != null);
+  if (scored.length === 0) return null;
+
+  const metrics: { key: keyof TextureTrialDetail; label: string; color: string; debug?: boolean }[] = [
+    { key: 'beauty_pbr_score', label: 'Beauty PBR', color: '#dc2626' },
+    { key: 'score', label: '综合', color: '#2563eb', debug: true },
+    { key: 'proxy_score', label: 'Proxy', color: '#16a34a', debug: true },
+    { key: 'flat_score', label: 'Flat', color: '#9333ea', debug: true },
+  ];
+  const activeMetrics = metrics.filter(m => !m.debug || showDebugScores);
+
+  const allVals = scored.flatMap(d =>
+    activeMetrics.map(m => d[m.key] as number | undefined).filter((v): v is number => v != null),
+  );
+  if (allVals.length === 0) return null;
+
+  const minV = Math.min(...allVals, matchTarget ?? 1);
+  const maxV = Math.max(...allVals, matchTarget ?? 0, 0.01);
+  const pad = (maxV - minV) * 0.08 || 0.01;
+  const yMin = Math.max(0, minV - pad);
+  const yMax = maxV + pad;
+  const w = 640;
+  const h = 160;
+  const padL = 36;
+  const padR = 12;
+  const padT = 12;
+  const padB = 28;
+  const chartW = w - padL - padR;
+  const chartH = h - padT - padB;
+
+  const xFor = (i: number) => padL + (scored.length <= 1 ? chartW / 2 : (i / (scored.length - 1)) * chartW);
+  const yFor = (v: number) => padT + chartH - ((v - yMin) / (yMax - yMin)) * chartH;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-3 text-[10px]">
+        {activeMetrics.map(m => (
+          <span key={m.key} className="flex items-center gap-1">
+            <span className="inline-block w-3 h-0.5 rounded" style={{ background: m.color }} />
+            {m.label}{m.debug ? ' (debug)' : ''}
+          </span>
+        ))}
+        {matchTarget != null && <span className="text-gray-400">目标线 {matchTarget.toFixed(2)}</span>}
+      </div>
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full max-w-3xl">
+        {[0, 0.25, 0.5, 0.75, 1].map(t => {
+          const v = yMin + t * (yMax - yMin);
+          const y = yFor(v);
+          return (
+            <g key={t}>
+              <line x1={padL} y1={y} x2={w - padR} y2={y} stroke="#e5e7eb" strokeWidth="1" />
+              <text x={4} y={y + 3} fontSize="9" fill="#9ca3af">{v.toFixed(2)}</text>
+            </g>
+          );
+        })}
+        {matchTarget != null && matchTarget >= yMin && matchTarget <= yMax && (
+          <line x1={padL} y1={yFor(matchTarget)} x2={w - padR} y2={yFor(matchTarget)}
+            stroke="#f59e0b" strokeWidth="1" strokeDasharray="4 3" />
+        )}
+        {activeMetrics.map(m => {
+          const pts = scored.map((d, i) => {
+            const v = d[m.key] as number | undefined;
+            return v != null ? `${xFor(i)},${yFor(v)}` : null;
+          }).filter(Boolean);
+          if (pts.length < 2) return null;
+          return <polyline key={m.key} fill="none" stroke={m.color} strokeWidth="2" points={pts.join(' ')} />;
+        })}
+        {scored.map((d, i) => {
+          const v = d.beauty_pbr_score ?? d.score ?? 0;
+          const isBest = d.trial === bestTrial;
+          return (
+            <g key={d.trial}>
+              <circle cx={xFor(i)} cy={yFor(v)} r={isBest ? 5 : 3}
+                fill={isBest ? '#16a34a' : '#dc2626'} stroke="#fff" strokeWidth="1" />
+              <text x={xFor(i)} y={h - 6} textAnchor="middle" fontSize="9" fill="#6b7280">#{d.trial}</text>
+            </g>
+          );
+        })}
+      </svg>
+      <table className="text-[10px] w-full font-mono">
+        <thead>
+          <tr className="text-gray-400 text-left">
+            <th className="pr-2">Trial</th>
+            <th className="pr-2">PBR</th>
+            {showDebugScores && <th className="pr-2">综合</th>}
+            {showDebugScores && <th className="pr-2">Proxy</th>}
+            {showDebugScores && <th className="pr-2">Flat</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {scored.map(d => (
+            <tr key={d.trial} className={d.trial === bestTrial ? 'text-green-700 font-semibold' : ''}>
+              <td className="pr-2">#{d.trial}</td>
+              <td className="pr-2 text-red-700">{d.beauty_pbr_score?.toFixed(4) ?? '-'}</td>
+              {showDebugScores && <td className="pr-2">{d.score?.toFixed(4) ?? '-'}</td>}
+              {showDebugScores && <td className="pr-2 text-green-700">{d.proxy_score?.toFixed(4) ?? '-'}</td>}
+              {showDebugScores && <td className="pr-2">{d.flat_score?.toFixed(4) ?? '-'}</td>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function TextureCalibrationReview({
   report,
   trials,
   loadKey,
+  runId,
 }: {
   report: TextureCalibrationReport;
   trials: TrialImage[];
   loadKey: number;
+  runId?: string;
 }) {
+  const defaults = report.ui_manifest?.defaults || {};
+  const [showDebugScores, setShowDebugScores] = useState(defaults.expand_trend_debug_scores ?? false);
+  const [selectedBeautyTrial, setSelectedBeautyTrial] = useState<string | null>(null);
+  const [showAllBeautyTrials, setShowAllBeautyTrials] = useState(false);
+
   const finishId = report.finish_id || '';
   const review = report.review_images || {};
+  const runQs = runId ? `&run=${encodeURIComponent(runId)}` : '';
   const imgUrl = (name: string) =>
-    `/api/calibration-reports/texture/${finishId}/images/${name}?_t=${loadKey}`;
+    `/api/calibration-reports/texture/${finishId}/images/${name}?_t=${loadKey}${runQs}`;
 
-  const texParamKeys: { key: string; label: string }[] = [
-    { key: 'bump_strength', label: 'Bump' },
-    { key: 'micro_scale', label: 'Micro scale' },
-    { key: 'micro_detail', label: 'Micro detail' },
-    { key: 'fine_scale', label: 'Fine scale' },
-    { key: 'fine_detail', label: 'Fine detail' },
-    { key: 'rough_mix_factor', label: 'Rough mix' },
-    { key: 'rough_ramp_to_min', label: 'Ramp min' },
-    { key: 'rough_ramp_to_max', label: 'Ramp max' },
-  ];
+  const trialDetails = report.trial_details || [];
+  const beautyTrials = trials.filter(t => t.phase === 'beauty' || t.filename.includes('_beauty'));
+  const proxyTrials = trials.filter(t => t.phase === 'proxy' || (!t.phase && !t.filename.includes('_beauty')));
+
+  const primaryKeys = report.ui_manifest?.primary_params || TEXTURE_PRIMARY_PARAM_KEYS;
+  const paramLabel = (key: string) => key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+  const sortedBeauty = [...beautyTrials].sort((a, b) => (b.beauty_pbr_score ?? b.score ?? 0) - (a.beauty_pbr_score ?? a.score ?? 0));
+  const visibleBeauty = showAllBeautyTrials ? sortedBeauty : sortedBeauty.slice(0, 5);
+  const selectedBeauty = selectedBeautyTrial
+    ? beautyTrials.find(t => t.filename === selectedBeautyTrial)
+    : sortedBeauty.find(t => t.is_best) || sortedBeauty[0];
+
+  const metrics = report.best_match_metrics;
+  const g1Score = report.g1_beauty_pbr_score ?? metrics?.beauty_pbr_score;
+  const proxyScore = metrics?.proxy_score;
+  const scoreSplitWarning = g1Score != null && proxyScore != null && g1Score < 0.2 && proxyScore > 0.5;
+
+  const artifactGroups = report.ui_manifest?.review_groups || {};
+  const swatchGroup = artifactGroups.swatches;
+  const detailGroup = artifactGroups.texture_detail;
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-lg shadow p-4">
-        <div className="text-xs font-semibold text-gray-500 uppercase mb-3">纹理校准概览</div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-          <div><div className="text-xs text-gray-400">Finish</div><div className="font-semibold">{finishId}</div></div>
-          <div><div className="text-xs text-gray-400">Best score</div><div className="font-semibold font-mono">{report.best_score?.toFixed(4) ?? '-'}</div></div>
-          <div><div className="text-xs text-gray-400">Best trial</div><div className="font-semibold">#{report.best_trial ?? '-'}</div></div>
-          <div><div className="text-xs text-gray-400">Trials</div><div className="font-semibold">{report.n_trials_completed ?? '-'}</div></div>
-        </div>
-        {report.reference_path && (
-          <div className="mt-2 text-xs text-gray-400 truncate">参考: {report.reference_path}</div>
-        )}
-        {report.substrate_meta?.substrate_finish_id && (
-          <div className="mt-1 text-xs text-gray-500">
-            铝基材: {report.substrate_meta.substrate_finish_id} · 漆面: {report.substrate_meta.paint_finish_id || finishId}
-          </div>
-        )}
-      </div>
+      <TextureStatusBar report={report} runId={runId} />
 
-      <div className="bg-white rounded-lg shadow p-4">
-        <div className="text-xs font-semibold text-gray-500 uppercase mb-3">Beauty vs 参考对比</div>
-        <p className="text-xs text-gray-400 mb-3">
-          合成图可能抹平细颗粒，请点开下方单张 Beauty / Roughness 查看。右栏为伪彩色粗糙度可视化（蓝低黄高）。
-        </p>
-        {(report.beauty_review_note || report.proxy_review_note) && (
-          <div className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded p-2 mb-3 space-y-1">
-            {report.beauty_review_note && <p>{report.beauty_review_note}</p>}
-            {report.proxy_review_note && <p>{report.proxy_review_note}</p>}
+      <TextureG1Hero
+        review={review}
+        beautyReviewNote={report.beauty_review_note}
+        imgUrl={imgUrl}
+      />
+
+      {beautyTrials.length > 0 && (
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-xs font-semibold text-gray-600 uppercase">Beauty Trial 过程（G1）</div>
+            {beautyTrials.length > 5 && (
+              <button type="button" onClick={() => setShowAllBeautyTrials(v => !v)}
+                className="text-xs text-blue-600 hover:underline">
+                {showAllBeautyTrials ? '收起' : `展开全部 ${beautyTrials.length}`}
+              </button>
+            )}
           </div>
-        )}
-        {review.compare_triple ? (
-          <img src={imgUrl(review.compare_triple)} alt="compare triple"
-            className="w-full rounded border bg-black mb-3" />
-        ) : null}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {review.reference && (
-              <div>
-                <div className="text-xs text-gray-500 mb-1">参考</div>
-                <img src={imgUrl(review.reference)} className="w-full rounded border" alt="reference" />
+          {selectedBeauty && (
+            <div className="mb-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+              <img src={imgUrl(selectedBeauty.filename)} alt={selectedBeauty.trial_id}
+                className="w-full rounded border bg-gray-900" />
+              <div className="text-xs text-gray-500 space-y-1">
+                <div>Trial #{selectedBeauty.trial_num ?? selectedBeauty.trial_id}</div>
+                {selectedBeauty.beauty_pbr_score != null && (
+                  <div className="font-mono text-red-700">Beauty PBR {selectedBeauty.beauty_pbr_score.toFixed(4)}</div>
+                )}
+                {selectedBeauty.is_best && <div className="text-green-700">Optuna 最优</div>}
               </div>
-            )}
-            {review.beauty_best && (
-              <div>
-                <div className="text-xs text-gray-500 mb-1">Beauty（审查）</div>
-                <img src={imgUrl(review.beauty_best)} className="w-full rounded border bg-gray-900" alt="beauty" />
-              </div>
-            )}
-            {review.proxy_best && (
-              <div>
-                <div className="text-xs text-gray-500 mb-1">粗糙度伪彩色</div>
-                <img src={imgUrl(review.proxy_best)} className="w-full rounded border bg-black" alt="proxy" />
-              </div>
-            )}
+            </div>
+          )}
+          <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
+            {visibleBeauty.map(t => (
+              <button key={t.filename} type="button"
+                onClick={() => setSelectedBeautyTrial(t.filename === selectedBeautyTrial ? null : t.filename)}
+                className={`rounded border overflow-hidden text-left ${t.is_best ? 'ring-2 ring-green-500' : ''} ${selectedBeautyTrial === t.filename ? 'ring-2 ring-blue-400' : ''}`}>
+                <img src={imgUrl(t.filename)} alt={t.trial_id}
+                  className="w-full aspect-square object-cover bg-gray-900" />
+                <div className="p-1 text-[10px] text-center text-gray-500">
+                  #{t.trial_num ?? t.trial_id.replace('trial_', '').replace('_beauty', '')}
+                  {t.beauty_pbr_score != null && (
+                    <span className="font-mono block text-red-700">B {t.beauty_pbr_score.toFixed(3)}</span>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
-        {review.compare_beauty_ref && (
-          <div className="mt-3">
-            <div className="text-xs text-gray-500 mb-1">参考 vs Beauty</div>
-            <img src={imgUrl(review.compare_beauty_ref)} className="w-full max-w-2xl rounded border" alt="compare pair" />
+      )}
+
+      {trialDetails.length > 0 && (
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-xs font-semibold text-gray-600 uppercase">Trial PBR 趋势</div>
+            <label className="text-[10px] text-gray-500 flex items-center gap-1">
+              <input type="checkbox" checked={showDebugScores} onChange={e => setShowDebugScores(e.target.checked)} />
+              显示 Proxy/Flat debug 分
+            </label>
           </div>
-        )}
-      </div>
+          <TextureTrialTrendChart
+            details={trialDetails}
+            bestTrial={report.best_trial}
+            matchTarget={report.match_target}
+            showDebugScores={showDebugScores}
+          />
+        </div>
+      )}
 
       {report.best_params && (
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="text-xs font-semibold text-gray-500 uppercase mb-3">最优 bakecoat 参数</div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm font-mono">
-            {texParamKeys.map(({ key, label }) => {
+        <CollapsiblePanel title="定稿 bakecoat 参数" badge={`${primaryKeys.length} 键`} defaultOpen={false}>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm font-mono mb-3">
+            {primaryKeys.map(key => {
               const v = report.best_params?.[key];
               if (v === undefined) return null;
               return (
                 <div key={key} className="bg-gray-50 rounded px-2 py-1">
-                  <span className="text-gray-500 text-xs">{label}</span>
+                  <span className="text-gray-500 text-xs">{paramLabel(key)}</span>
                   <div>{typeof v === 'number' ? v.toFixed(4) : v}</div>
                 </div>
               );
             })}
           </div>
-        </div>
+          <details className="text-xs">
+            <summary className="cursor-pointer text-gray-500">展开全部参数</summary>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2 font-mono">
+              {Object.entries(report.best_params).filter(([k]) => !primaryKeys.includes(k)).map(([key, v]) => (
+                <div key={key} className="bg-gray-50 rounded px-2 py-1">
+                  <span className="text-gray-500 text-xs">{paramLabel(key)}</span>
+                  <div>{typeof v === 'number' ? v.toFixed(4) : v}</div>
+                </div>
+              ))}
+            </div>
+          </details>
+        </CollapsiblePanel>
       )}
 
-      {trials.length > 0 && (
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="text-xs font-semibold text-gray-500 uppercase mb-3">
-            搜索 Trial（Roughness 代理 pass）
-          </div>
-          <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
-            {trials.map(t => (
-              <div key={t.filename}
-                className={`rounded border overflow-hidden ${t.is_best ? 'ring-2 ring-green-500' : ''}`}>
-                <img src={imgUrl(t.filename)} alt={t.trial_id}
-                  className="w-full aspect-square object-cover bg-black" />
-                <div className="p-1 text-[10px] text-center text-gray-500">
-                  {t.trial_id.replace('trial_', '#')}
-                  {t.score != null && <span className="font-mono"> · {t.score.toFixed(3)}</span>}
+      {(metrics || scoreSplitWarning) && (
+        <CollapsiblePanel
+          title="评分诊断"
+          badge={g1Score != null ? `PBR ${g1Score.toFixed(3)}` : undefined}
+          defaultOpen={scoreSplitWarning}
+          muted
+        >
+          {scoreSplitWarning && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded p-2 mb-3">
+              Proxy/Flat 分数高但 Beauty PBR 极低 — 评分链路未对齐 G1，请以 compare_beauty_pbr 为准。
+            </p>
+          )}
+          {metrics && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm font-mono">
+              {Object.entries(metrics).map(([k, v]) => (
+                <div key={k} className="bg-white rounded px-2 py-1 border border-gray-100">
+                  <span className="text-gray-500 text-xs">{k}</span>
+                  <div className={k.includes('beauty') ? 'text-red-700' : k.includes('proxy') ? 'text-green-700' : ''}>
+                    {v.toFixed(4)}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+          )}
+          {report.warm_start_meta && (
+            <details className="mt-3 text-[10px] text-gray-400 font-mono">
+              <summary className="cursor-pointer">warm-start meta</summary>
+              <pre className="mt-1 whitespace-pre-wrap">{JSON.stringify(report.warm_start_meta, null, 2)}</pre>
+            </details>
+          )}
+        </CollapsiblePanel>
+      )}
+
+      <CollapsiblePanel title="Scorer / Proxy（debug，非 G1）" defaultOpen={false} muted>
+        {report.proxy_review_note && (
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded p-2 mb-3">
+            {report.proxy_review_note}
+          </p>
+        )}
+        {typeof review.compare_triple === 'string' && (
+          <img src={imgUrl(review.compare_triple)} alt="compare triple" className="w-full rounded border bg-black mb-3" />
+        )}
+        {typeof review.compare_beauty_ref === 'string' && (
+          <img src={imgUrl(review.compare_beauty_ref)} alt="compare beauty ref" className="w-full max-w-2xl rounded border" />
+        )}
+        {proxyTrials.length > 0 && (
+          <div className="mt-3">
+            <div className="text-xs text-gray-500 mb-2">Proxy trial 网格</div>
+            <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
+              {proxyTrials.map(t => (
+                <div key={t.filename} className={`rounded border overflow-hidden ${t.is_best ? 'ring-2 ring-green-500' : ''}`}>
+                  <img src={imgUrl(t.filename)} alt={t.trial_id} className="w-full aspect-square object-cover bg-black" />
+                  <div className="p-1 text-[10px] text-center text-gray-500">
+                    #{t.trial_num ?? t.trial_id.replace('trial_', '')}
+                    {t.proxy_score != null && <span className="font-mono block text-green-700">P {t.proxy_score.toFixed(3)}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
+      </CollapsiblePanel>
+
+      {(detailGroup || swatchGroup) && (
+        <CollapsiblePanel title="其他 review 产物" defaultOpen={false} muted>
+          {detailGroup && (
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              {Object.entries(detailGroup.items).flatMap(([key, val]) => {
+                const names = Array.isArray(val) ? val : [val];
+                return names.map(name => (
+                  <div key={`${key}-${name}`}>
+                    <div className="text-xs text-gray-500 mb-1">{REVIEW_IMAGE_LABELS[key] || key}</div>
+                    <img src={imgUrl(name)} className="w-full rounded border bg-gray-50" alt={name} />
+                  </div>
+                ));
+              })}
+            </div>
+          )}
+          {swatchGroup && (
+            <details>
+              <summary className="text-xs text-gray-500 cursor-pointer mb-2">{swatchGroup.label}</summary>
+              <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
+                {(swatchGroup.items.reference_swatches || []).map((name, i) => (
+                  <img key={name} src={imgUrl(name)} alt={`swatch-${i}`} className="w-full rounded border" />
+                ))}
+              </div>
+            </details>
+          )}
+        </CollapsiblePanel>
       )}
     </div>
   );

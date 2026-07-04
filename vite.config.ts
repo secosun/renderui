@@ -7,6 +7,10 @@ export default defineConfig({
   server: {
     port: 8050,
     strictPort: true,
+    watch: {
+      usePolling: true,
+      interval: 1000,
+    },
     allowedHosts: ['cadrender.installall.cn'],
     proxy: {
       '/api': {
